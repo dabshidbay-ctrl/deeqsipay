@@ -38,6 +38,7 @@ export default async function ProfilePage() {
         <div className="rounded-2xl bg-card p-4"><ShieldCheck className="text-primary" size={18} /><p className="mt-4 font-serif text-2xl">{formatMoney(givenMinor, currency)}</p><p className="text-xs text-muted-foreground">given with care</p></div>
       </div>
       <div className="flex items-center justify-between pt-5"><div><p className="eyebrow">Organization dashboard</p><h2 className="mt-1 font-serif text-2xl">Your fundraisers</h2></div><Link href="/create" aria-label="Add campaign" className="icon-button"><Plus size={18} /></Link></div>
+      <Link href="/dashboard" className="flex items-center justify-between rounded-2xl border border-border bg-card p-4"><span className="flex items-center gap-3 text-sm font-semibold"><BarChart3 size={18} className="text-primary" /> Full dashboard</span><ChevronRight size={18} className="text-muted-foreground" /></Link>
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-xl border border-border bg-card p-3"><BarChart3 size={16} className="text-primary" /><p className="mt-3 font-serif text-xl">{formatMoney(raisedMinor, currency)}</p><p className="text-[10px] text-muted-foreground">raised</p></div>
         <div className="rounded-xl border border-border bg-card p-3"><Heart size={16} className="text-primary" /><p className="mt-3 font-serif text-xl">{donorTotal}</p><p className="text-[10px] text-muted-foreground">donors</p></div>

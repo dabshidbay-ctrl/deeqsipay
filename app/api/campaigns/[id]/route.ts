@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient, requireUser } from '@/lib/server/supabase-admin'
+import { isSafeImageUrl } from '@/lib/server/validation'
 
 const categories = new Set(['Medical', 'Emergency', 'Community', 'Nonprofit', 'Education'])
 const statuses = new Set(['active', 'paused', 'completed'])
@@ -37,7 +38,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       patch.category = body.category
     }
     if (body.imageUrl !== undefined) {
-      if (body.imageUrl !== null && typeof body.imageUrl !== 'string') return NextResponse.json({ error: 'Invalid campaign details' }, { status: 400 })
+      if (body.imageUrl !== null && !isSafeImageUrl(body.imageUrl)) return NextResponse.json({ error: 'Campaign image must be a public https URL' }, { status: 400 })
       patch.image_url = body.imageUrl
     }
     if (body.status !== undefined) {

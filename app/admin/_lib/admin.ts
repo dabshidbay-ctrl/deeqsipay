@@ -21,14 +21,28 @@ function asStaffRole(value: unknown): StaffRole | null {
  * layout and its page render in parallel and a layout alone would not stop a page's read.
  */
 export async function requireStaff() {
-  const user = await getSessionUser()
-  if (!user) notFound()
-  const supabase = await createSupabaseServerClient()
-  const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
-  const profile = (data ?? null) as { role?: unknown } | null
-  const role = asStaffRole(profile?.role)
-  if (role === null) notFound()
-  return { user, role, supabase }
+  // Anything that goes wrong reaching Supabase — unconfigured env, network, a failed
+  // role lookup — must read as "not staff", never as a 500. A crash here would both
+  // confirm the segment exists and hand a stranger a stack trace.
+  const resolved = await (async () => {
+    try {
+      const user = await getSessionUser()
+      if (!user) return null
+      const supabase = await createSupabaseServerClient()
+      const { data, error } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+      if (error) return null
+      const profile = (data ?? null) as { role?: unknown } | null
+      const role = asStaffRole(profile?.role)
+      return role === null ? null : { user, role, supabase }
+    } catch {
+      return null
+    }
+  })()
+
+  // notFound() throws its own control-flow signal, so it is called OUTSIDE the catch
+  // above — swallowing it there would let an unauthorised request continue.
+  if (resolved === null) notFound()
+  return resolved
 }
 
 /** PostgREST returns an object for a to-one embed; supabase-js can surface it as an array. */

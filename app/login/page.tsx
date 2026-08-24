@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { tryGetSupabaseBrowserClient } from '@/lib/supabase/client'
 
 type Mode = 'signin' | 'signup'
 
@@ -24,7 +24,11 @@ function LoginForm() {
     setError(null)
     setSubmitting(true)
     try {
-      const supabase = getSupabaseBrowserClient()
+      const supabase = tryGetSupabaseBrowserClient()
+      if (!supabase) {
+        setError('Sign-in is unavailable: add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local.')
+        return
+      }
       const { error: authError } = mode === 'signin'
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password })

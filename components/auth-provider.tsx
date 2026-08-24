@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
-import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { tryGetSupabaseBrowserClient } from '@/lib/supabase/client'
 
 type AuthUserState = { user: User | null; loading: boolean }
 
@@ -14,7 +14,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthUserState>({ user: null, loading: true })
 
   useEffect(() => {
-    const supabase = getSupabaseBrowserClient()
+    const supabase = tryGetSupabaseBrowserClient()
+    if (!supabase) { setState({ user: null, loading: false }); return }
 
     supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       setState({ user: session?.user ?? null, loading: false })

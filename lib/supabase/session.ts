@@ -1,4 +1,4 @@
-import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { tryGetSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export class AuthRequiredError extends Error {
   constructor() {
@@ -26,7 +26,9 @@ function errorMessage(payload: unknown, status: number): string {
 }
 
 export async function authedFetch<T = unknown>(input: string, init?: RequestInit): Promise<T> {
-  const { data: { session } } = await getSupabaseBrowserClient().auth.getSession()
+  const supabase = tryGetSupabaseBrowserClient()
+  if (!supabase) throw new AuthRequiredError()
+  const { data: { session } } = await supabase.auth.getSession()
   if (!session) throw new AuthRequiredError()
 
   const response = await fetch(input, {

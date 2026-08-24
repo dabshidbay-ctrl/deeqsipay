@@ -11,17 +11,45 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-softer: var(--accent-softer);
   --font-sans: var(--font-dm-sans), sans-serif;
   --font-serif: var(--font-dm-serif), serif;
 }
 
-:root { --background: #fbfcf9; --foreground: #18312a; --card: #ffffff; --card-foreground: #18312a; --primary: #267d62; --primary-foreground: #f4f8f2; --muted: #eef3ed; --muted-foreground: #71817a; --border: #e3eae2; }
+:root {
+  --background: #fbfcf9; --foreground: #18312a; --card: #ffffff; --card-foreground: #18312a;
+  --primary: #267d62; --primary-foreground: #f4f8f2; --muted: #eef3ed; --muted-foreground: #71817a;
+  --border: #e3eae2;
+  /* previously hardcoded in components: avatar/badge tints and the progress track */
+  --accent-soft: #dcece2; --accent-softer: #e4f1e8; --track: #e9eee8;
+  --tint-sky-bg: #dcebf0; --tint-sky-fg: #467787;
+  --tint-mint-bg: #e0eee3; --tint-mint-fg: #4e805d;
+  --nav-surface: rgba(251,252,249,.94);
+  --sheet-shadow: rgba(0,0,0,.15);
+}
+
+/* layout.tsx declares colorScheme 'light dark', so the UA styles form controls and
+   scrollbars dark in dark mode. Without these tokens the page stayed light and the
+   controls did not match. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0e1512; --foreground: #e7eee9; --card: #151e1a; --card-foreground: #e7eee9;
+    --primary: #4cbd94; --primary-foreground: #07120d; --muted: #1b2621; --muted-foreground: #93a49c;
+    --border: #24322c;
+    --accent-soft: #1e3a2e; --accent-softer: #1a3227; --track: #253029;
+    --tint-sky-bg: #1c3038; --tint-sky-fg: #8fbecd;
+    --tint-mint-bg: #1d3326; --tint-mint-fg: #8cc79c;
+    --nav-surface: rgba(14,21,18,.94);
+    --sheet-shadow: rgba(0,0,0,.5);
+  }
+}
 * { box-sizing: border-box; }
 html { background: var(--background); }
 body { margin: 0; background: var(--background); font-family: var(--font-sans); }
 button { cursor: pointer; }
 .icon-button { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--border); border-radius: 50%; background: var(--card); color: var(--foreground); }
-.avatar, .mini-avatar { display: grid; place-items: center; border-radius: 50%; background: #dcece2; color: var(--primary); font-size: 10px; font-weight: 700; }
+.avatar, .mini-avatar { display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--primary); font-size: 10px; font-weight: 700; }
 .avatar { width: 38px; height: 38px; margin-left: 2px; }
 .eyebrow { color: var(--primary); font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
 .scrollbar-hidden { scrollbar-width: none; }
@@ -34,17 +62,17 @@ button { cursor: pointer; }
 .save-button { position: absolute; right: 12px; top: 12px; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(255,255,255,.9); color: var(--foreground); }
 .category-badge { position: absolute; bottom: 12px; left: 13px; border-radius: 999px; background: rgba(255,255,255,.9); padding: 5px 9px; color: var(--foreground); font-size: 10px; font-weight: 800; }
 .mini-avatar { width: 25px; height: 25px; }
-.mini-avatar.sky { background: #dcebf0; color: #467787; } .mini-avatar.mint { background: #e0eee3; color: #4e805d; }
-.progress-track { height: 6px; overflow: hidden; border-radius: 99px; background: #e9eee8; } .progress-fill { height: 100%; border-radius: inherit; background: var(--primary); }
+.mini-avatar.sky { background: var(--tint-sky-bg); color: var(--tint-sky-fg); } .mini-avatar.mint { background: var(--tint-mint-bg); color: var(--tint-mint-fg); }
+.progress-track { height: 6px; overflow: hidden; border-radius: 99px; background: var(--track); } .progress-fill { height: 100%; border-radius: inherit; background: var(--primary); }
 .donate-button, .confirm-button { display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); font-weight: 800; }
 .donate-button { padding: 9px 13px; font-size: 11px; }
-.bottom-nav { position: fixed; bottom: 0; z-index: 10; display: flex; align-items: center; justify-content: space-around; width: min(100%, 470px); border-top: 1px solid var(--border); background: rgba(251,252,249,.94); padding: 10px 14px 12px; backdrop-filter: blur(12px); }
+.bottom-nav { position: fixed; bottom: 0; z-index: 10; display: flex; align-items: center; justify-content: space-around; width: min(100%, 470px); border-top: 1px solid var(--border); background: var(--nav-surface); padding: 10px 14px 12px; backdrop-filter: blur(12px); }
 .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--muted-foreground); font-size: 10px; font-weight: 700; } .nav-active { color: var(--primary); }
 .create-button { display: grid; place-items: center; width: 46px; height: 46px; margin-top: -25px; border: 5px solid var(--background); border-radius: 50%; background: var(--primary); color: var(--primary-foreground); }
 .modal-backdrop { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; justify-content: center; background: rgba(17,40,32,.36); }
-.donation-sheet { position: relative; width: min(100%, 470px); border-radius: 26px 26px 0 0; background: var(--background); padding: 28px 22px 24px; box-shadow: 0 -20px 60px rgba(0,0,0,.15); }
+.donation-sheet { position: relative; width: min(100%, 470px); border-radius: 26px 26px 0 0; background: var(--background); padding: 28px 22px 24px; box-shadow: 0 -20px 60px var(--sheet-shadow); }
 .sheet-handle { position: absolute; left: 50%; top: 10px; width: 38px; height: 4px; transform: translateX(-50%); border-radius: 4px; background: var(--border); } .modal-close { position: absolute; right: 17px; top: 20px; display: grid; place-items: center; border: 0; background: transparent; color: var(--muted-foreground); }
-.amount-option, .amount-input { border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 13px; text-align: center; color: var(--foreground); font-size: 14px; font-weight: 800; } .amount-active { border-color: var(--primary); background: #e4f1e8; color: var(--primary); }
+.amount-option, .amount-input { border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 13px; text-align: center; color: var(--foreground); font-size: 14px; font-weight: 800; } .amount-active { border-color: var(--primary); background: var(--accent-softer); color: var(--primary); }
 .amount-input { display: block; width: 100%; margin-top: 7px; outline: none; text-align: left; } .confirm-button { width: 100%; margin-top: 18px; padding: 15px; }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @media (min-width: 700px) { body { padding: 28px 0; } .bottom-nav { bottom: 28px; border: 1px solid var(--border); border-radius: 18px; } }

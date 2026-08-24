@@ -1,2 +1,15 @@
 [ox] stealth/ox-alpha <- tools/ox/specs/03-api.md (17943 chars)
 [ox] 429 upstream, retry 1/6 in 4s
+[ox] 292.9s | tokens 16696 | wrote 3 files
+  app/api/campaigns/[id]/route.ts
+  app/api/donations/[id]/route.ts
+  app/api/saved/route.ts
+
+NOTES:- Embed aliases assume default Postgres FK constraint names (`campaigns_owner_id_fkey`, `saved_campaigns_campaign_id_fkey`); both follow from 0001_init.sql's unnamed foreign keys.
+- PATCH validates trimmed title/description lengths (so the DB char_length checks can never reject a valid API payload) and returns 400 for an empty patch; unrecognized body keys are ignored, matching "accept only".
+- DELETE /api/saved responds `{ saved: false }` even when no row existed — idempotent unsave.
+- GET /api/saved orders by `saved_campaigns.created_at` desc (newest saves first); the ordering column is intentionally omitted from the select.
+- Every response from `/api/donations/[id]` (including errors) carries `Cache-Control: no-store`, since any of them could be cached by an intermediary otherwise.
+- Ownership checks on donations/campaigns are enforced in-query because the admin client bypasses RLS; non-owner reads return 404 without existence leaks.
+=== END NOTES ===
+API DONE rc=0

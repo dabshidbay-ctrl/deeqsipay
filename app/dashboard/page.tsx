@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowLeft, BarChart3, Clock, Heart, TrendingUp, Users, Wallet } from 'lucide-react'
+import { ArrowLeft, Banknote, BarChart3, Clock, Heart, TrendingUp, Users, Wallet } from 'lucide-react'
 import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase/server'
 import { formatMoney, initials, progressPercent } from '@/lib/campaigns'
 
@@ -131,7 +131,12 @@ export default async function DashboardPage() {
           </li>)}</ul>}
       </section>
 
-      <Link href="/create" className="mt-8 flex items-center justify-between rounded-2xl bg-primary p-4 text-primary-foreground">
+      <Link href="/dashboard/payouts" className="mt-8 flex items-center justify-between rounded-2xl border border-border bg-card p-4">
+        <span><span className="block font-serif text-xl">Payouts</span><span className="mt-1 block text-xs text-muted-foreground">See what&rsquo;s available and ask for your money.</span></span>
+        <Banknote size={19} className="text-primary" />
+      </Link>
+
+      <Link href="/create" className="mt-3 flex items-center justify-between rounded-2xl bg-primary p-4 text-primary-foreground">
         <span><span className="block font-serif text-xl">Start another campaign</span><span className="mt-1 block text-xs text-primary-foreground/70">Give your next cause a place to grow.</span></span>
         <Heart size={19} fill="currentColor" />
       </Link>

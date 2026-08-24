@@ -1,1 +1,10 @@
 [ox] stealth/ox-alpha <- tools/ox/specs/06-payouts-schema.md (21022 chars)
+[ox] 477.3s | tokens 23319 | wrote 1 files
+  supabase/migrations/0002_admin_payouts.sql
+
+NOTES:- Legacy `status='draft'` campaigns are remapped to `under_review` before the tightened CHECK is added; any other pre-existing out-of-list status would make the constraint add fail loudly (intentional).
+- `set_campaign_status` is fixed at 3 params by the contract, so it does not write `review_note`/`reviewed_at`/`reviewed_by`; those columns are service-role-writable for the API layer to populate alongside the rpc call.
+- Referential actions on `payouts` were unspecified by the contract; I mirrored 0001 conventions (`campaign_id`/`requested_by` CASCADE, nullable `reviewed_by` SET NULL).
+- As in 0001, table-level SELECT for `authenticated` on `payouts` relies on Supabase default privileges; visibility is gated purely by the RLS policy.
+- `decide_payout` intentionally permits `approved -> rejected` per the contract's transition table (an approved-but-unpaid payout can still be refused); it releases the reservation automatically since `rejected` is outside the reserved set.
+=== END NOTES ===

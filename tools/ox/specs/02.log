@@ -4,3 +4,21 @@
 [ox] 429 upstream, retry 3/6 in 16s
 [ox] 429 upstream, retry 4/6 in 32s
 [ox] 429 upstream, retry 5/6 in 60s
+[ox] 755.3s | tokens 26922 | wrote 8 files
+  lib/supabase/client.ts
+  lib/supabase/server.ts
+  lib/supabase/session.ts
+  middleware.ts
+  app/login/page.tsx
+  app/auth/signout/route.ts
+  components/auth-provider.tsx
+  components/kindred-shell.tsx
+
+NOTES:- `AuthProvider` is not mounted anywhere yet (root layout wasn't in scope). Until it wraps the app (e.g. in `app/layout.tsx`), `useAuthUser()` returns the context default `{ user: null, loading: true }`, so `KindredHeader` will render the signed-out "in" link.
+- Per spec, `components/kindred-shell.tsx` is now a client module. Any SERVER component that imports the plain-data export `seededCampaigns` from it will receive a client-reference stub rather than the array (client-module exports become references across the RSC boundary). Flagged since a later task removes these exports anyway; if a server page breaks on `.map`, that page needs to become a client component or the data must move.
+- Login assumes Supabase email auto-confirm is enabled. If "Confirm email" is on, `signUp` succeeds without creating a session; the redirect then lands the user signed-out and they must confirm via email and sign in.
+- Middleware degrades gracefully (skips refresh/protection) if the `NEXT_PUBLIC_SUPABASE_*` vars are missing, keeping public pages alive; `lib/supabase/*` helpers throw loudly instead, matching `lib/server/supabase-admin.ts` style.
+- Sign-out responds 303 so browsers convert the POST into a GET navigation to `/`.
+- `authedFetch` merges caller headers via `new Headers(init?.headers)` and always wins for `Authorization`/`content-type`; it tolerates empty/non-JSON bodies (treated as `null`).
+=== END NOTES ===
+AUTH DONE rc=0

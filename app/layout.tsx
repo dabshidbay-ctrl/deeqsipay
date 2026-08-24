@@ -1,4 +1,5 @@
 import { Analytics } from '@vercel/analytics/next'
+import { AuthProvider } from '@/components/auth-provider'
 import { DM_Sans, DM_Serif_Display } from 'next/font/google'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
@@ -45,7 +46,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-background">
       <body className={`${dmSans.variable} ${dmSerif.variable} antialiased`}>
-        {children}
+        <AuthProvider>{children}</AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

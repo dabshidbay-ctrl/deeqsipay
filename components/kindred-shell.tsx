@@ -1,21 +1,9 @@
 import Link from 'next/link'
-import { Bell, Bookmark, Compass, Home, Plus, UserRound } from 'lucide-react'
+import { Bookmark, Compass, Home, Plus, UserRound } from 'lucide-react'
 import { KindredFooter } from '@/components/kindred-footer'
+import { KindredHeader } from '@/components/kindred-header'
 
-export function KindredHeader({ eyebrow = 'kindred' }: { eyebrow?: string }) {
-  return (
-    <header className="flex items-center justify-between px-5 pb-3 pt-7">
-      <Link href="/" className="block">
-        <p className="font-serif text-[29px] font-semibold leading-none tracking-[-0.04em] text-foreground">kindred</p>
-        <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{eyebrow}</p>
-      </Link>
-      <div className="flex items-center gap-2">
-        <Link href="/notifications" aria-label="Notifications" className="icon-button relative"><Bell size={19} /><span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" /></Link>
-        <Link href="/profile" aria-label="Profile" className="avatar">JD</Link>
-      </div>
-    </header>
-  )
-}
+export { KindredHeader }
 
 export function BottomNav({ active = 'home' }: { active?: string }) {
   return <nav className="bottom-nav">

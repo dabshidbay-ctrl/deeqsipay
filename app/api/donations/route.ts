@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const user = await requireUser(request)
     if (!user) return json({ error: 'Authentication required' }, 401)
     const body = await request.json() as { campaignId?: string; amountMinor?: number; phone?: string; idempotencyKey?: string }
-    if (!body.campaignId || !body.idempotencyKey || !body.phone || !Number.isSafeInteger(body.amountMinor) || body.amountMinor < 100 || body.amountMinor > 1000000000) {
+    if (!body.campaignId || !body.idempotencyKey || !body.phone || typeof body.amountMinor !== 'number' || !Number.isSafeInteger(body.amountMinor) || body.amountMinor < 100 || body.amountMinor > 1000000000) {
       return json({ error: 'Invalid donation request' }, 400)
     }
     if (!/^\+?[1-9]\d{7,14}$/.test(body.phone)) return json({ error: 'Invalid mobile number' }, 400)

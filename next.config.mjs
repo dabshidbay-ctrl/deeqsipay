@@ -10,7 +10,9 @@ const nextConfig = {
     ] }]
   },
   typescript: {
-    ignoreBuildErrors: true,
+    // Was true, which shipped type errors to production. The codebase now
+    // typechecks clean — keep it false so regressions fail the build.
+    ignoreBuildErrors: false,
   },
   images: {
     unoptimized: true,

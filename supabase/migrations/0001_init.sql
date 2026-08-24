@@ -237,3 +237,11 @@ grant insert (owner_id, title, description, category, goal_minor, currency, imag
   on public.campaigns to authenticated;
 grant update (title, description, category, goal_minor, image_url, ends_at, status)
   on public.campaigns to authenticated;
+
+-- campaigns_select_active alone hides an owner's own draft/paused/completed campaigns
+-- from them, which breaks the profile dashboard. Policies are OR'd, so this adds
+-- owner-visibility without widening public access.
+drop policy if exists campaigns_select_own on public.campaigns;
+create policy campaigns_select_own on public.campaigns
+  for select to authenticated
+  using (owner_id = auth.uid());

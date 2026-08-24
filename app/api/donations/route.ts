@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   try {
     const user = await requireUser(request)
     if (!user) return json({ error: 'Authentication required' }, 401)
-    const body = await request.json() as { campaignId?: string; amountMinor?: number; phone?: string; idempotencyKey?: string }
+    const body = await request.json() as { campaignId?: string; amountMinor?: number; phone?: string; idempotencyKey?: string; anonymous?: boolean }
     if (!body.campaignId || !body.idempotencyKey || !body.phone || typeof body.amountMinor !== 'number' || !Number.isSafeInteger(body.amountMinor) || body.amountMinor < 100 || body.amountMinor > 1000000000) {
       return json({ error: 'Invalid donation request' }, 400)
     }
@@ -16,6 +16,12 @@ export async function POST(request: Request) {
     if (!/^[A-Za-z0-9_-]{16,80}$/.test(body.idempotencyKey)) return json({ error: 'Invalid idempotency key' }, 400)
 
     const supabase = createAdminClient()
+
+    // Rate limit payment initiation. Counted in the DB so it holds across instances.
+    const since = new Date(Date.now() - 60_000).toISOString()
+    const { count: recent } = await supabase.from('donations').select('id', { count: 'exact', head: true }).eq('donor_id', user.id).gte('created_at', since)
+    if ((recent ?? 0) >= 8) return json({ error: 'Too many donation attempts. Please wait a moment.' }, 429)
+
     const { data: existing } = await supabase.from('donations').select('id,status,provider_reference').eq('donor_id', user.id).eq('idempotency_key', body.idempotencyKey).maybeSingle()
     if (existing) return json({ donationId: existing.id, status: existing.status, providerReference: existing.provider_reference })
 
@@ -24,7 +30,7 @@ export async function POST(request: Request) {
     if (!campaign) return json({ error: 'Campaign unavailable' }, 404)
     const currency = typeof campaign.currency === 'string' ? campaign.currency : 'USD'
 
-    const { data: donation, error } = await supabase.from('donations').insert({ campaign_id: campaign.id, donor_id: user.id, amount_minor: body.amountMinor, currency, idempotency_key: body.idempotencyKey }).select('id').single()
+    const { data: donation, error } = await supabase.from('donations').insert({ campaign_id: campaign.id, donor_id: user.id, amount_minor: body.amountMinor, currency, is_anonymous: body.anonymous === true, idempotency_key: body.idempotencyKey }).select('id').single()
     if (error || !donation) {
       // 23505 on (donor_id, idempotency_key): a concurrent request for the SAME logical
       // donation won the race. Return its row rather than 500-ing and inviting a retry

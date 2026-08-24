@@ -255,3 +255,11 @@ alter table public.donations add column if not exists currency char(3) not null 
 -- Reconciliation sweeps pending donations oldest-first.
 create index if not exists donations_pending_created_at_idx
   on public.donations (created_at) where status = 'pending';
+
+-- Per-donation anonymity (not a profile-wide flag): a donor may want to be named on
+-- one campaign and anonymous on another.
+alter table public.donations add column if not exists is_anonymous boolean not null default false;
+
+-- Backs the public donor list: succeeded donations for a campaign, newest first.
+create index if not exists donations_campaign_succeeded_idx
+  on public.donations (campaign_id, created_at desc) where status = 'succeeded';

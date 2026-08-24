@@ -28,6 +28,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
   const [presetMinor, setPresetMinor] = useState<number | null>(null)
   const [customAmount, setCustomAmount] = useState('')
   const [phone, setPhone] = useState('')
+  const [anonymous, setAnonymous] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [donationId, setDonationId] = useState<string | null>(null)
   const [paidMinor, setPaidMinor] = useState<number | null>(null)
@@ -79,7 +80,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
       const data = await authedFetch<{ donationId?: string; status?: string }>('/api/donations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId: campaign.id, amountMinor, phone: phone.trim(), idempotencyKey: idempotencyRef.current }),
+        body: JSON.stringify({ campaignId: campaign.id, amountMinor, phone: phone.trim(), idempotencyKey: idempotencyRef.current, anonymous }),
       })
       if (typeof data.donationId !== 'string' || typeof data.status !== 'string') throw new ApiError(502, 'Unexpected reply from the payment provider')
       setDonationId(data.donationId)
@@ -153,6 +154,10 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
                 placeholder="+252 61 555 1234" disabled={busy} className="amount-input" />
             </label>
             {phone.trim() !== '' && !phoneValid && <p className="text-xs font-semibold text-red-500" role="alert">Add the country code, e.g. +252615551234.</p>}
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3">
+              <input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
+              <span className="text-xs leading-5"><strong className="block font-semibold">Give anonymously</strong><span className="text-muted-foreground">Your name will show as &ldquo;Anonymous&rdquo; on this campaign. The organiser still sees your donation.</span></span>
+            </label>
             <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> Mobile money payments secured by Sifalo Pay</p>
             {error !== null && <p className="text-xs font-semibold text-red-500" role="alert">{error}</p>}
             <button type="submit" className="confirm-button" disabled={!canSubmit}>

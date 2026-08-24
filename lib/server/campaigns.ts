@@ -6,7 +6,9 @@ const CAMPAIGN_SELECT = 'id,title,description,category,goal_minor,raised_minor,d
 const DEFAULT_LIMIT = 50
 
 export async function listCampaigns(opts?: { category?: string; limit?: number }): Promise<Campaign[]> {
-  const supabase = createAuthClient()
+  // Unconfigured Supabase env should render an empty feed, not a 500.
+  let supabase
+  try { supabase = createAuthClient() } catch { return [] }
   let query = supabase
     .from('campaigns')
     .select(CAMPAIGN_SELECT)
@@ -22,7 +24,8 @@ export async function listCampaigns(opts?: { category?: string; limit?: number }
 }
 
 export async function getCampaign(id: string): Promise<Campaign | null> {
-  const supabase = createAuthClient()
+  let supabase
+  try { supabase = createAuthClient() } catch { return null }
   const { data, error } = await supabase
     .from('campaigns')
     .select(CAMPAIGN_SELECT)

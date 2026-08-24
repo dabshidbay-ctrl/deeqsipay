@@ -8,6 +8,7 @@ import { listCampaigns } from '@/lib/server/campaigns'
 // Must use the cookie-aware server client: createAuthClient() is a bare anon client
 // with persistSession false, so auth.getUser() there is always null.
 async function getDisplayName(): Promise<string> {
+  try {
   const user = await getSessionUser()
   const userId = user?.id
   if (!userId) return 'there'
@@ -16,6 +17,7 @@ async function getDisplayName(): Promise<string> {
   const profile = (profileData ?? null) as { display_name?: string | null } | null
   const name = profile?.display_name?.trim() ?? ''
   return name.length > 0 ? name : 'there'
+  } catch { return 'there' }
 }
 
 export default async function Page() {

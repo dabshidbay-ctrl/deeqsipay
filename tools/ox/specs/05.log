@@ -1,1 +1,18 @@
 [ox] stealth/ox-alpha <- tools/ox/specs/05-donate.md (14195 chars)
+[ox] 868.9s | tokens 38132 | wrote 6 files
+  app/campaigns/[id]/donate/page.tsx
+  components/donate-form.tsx
+  app/create/page.tsx
+  app/saved/page.tsx
+  components/saved-list.tsx
+  components/save-button.tsx
+
+NOTES:- Assumed `authedFetch(url, init)` resolves to an unparsed `Response` and throws `AuthRequiredError` (signed out) / `ApiError` (non-2xx, `.status` + `.message`) per the stated contract.
+- Assumed `GET /api/saved` returns `{ campaigns: Campaign[] }` with rows already mapped to the `Campaign` shape; adjust `toCampaignList` if the envelope key differs.
+- The five allowed categories were not specified; I used Education / Healthcare / Water / Food / Emergency. Swap the `CATEGORIES` constant if the API whitelist differs.
+- Create-page success panel: success now redirects straight to the new campaign, so the old `setSubmitted` panel is unreachable and was removed; the header is preserved verbatim and the primary-panel visual language lives on in the donate flow's success state.
+- `SaveButton` keeps the specified `{ campaignId, initialSaved }` props and adds one optional `onSavedChange` callback so the saved list can remove the card optimistically; without it the list cannot learn about toggles.
+- Error text uses stock `text-red-500` since no error color token appeared in the provided files.
+- Idempotency: the key is generated once per form instance in a ref; network-level failures (unknown outcome) keep the key so retries replay safely, while confirmed terminal outcomes (failed/expired) rotate it via `resetAttempt`. Timeout intentionally keeps the key since the donation may still complete.
+- Polling swallows transient GET errors and keeps waiting; an `AuthRequiredError` mid-poll red
+in configuration dependencies.

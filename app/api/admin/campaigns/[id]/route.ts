@@ -26,7 +26,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body.note !== undefined && body.note !== null && typeof body.note !== 'string') return json({ error: 'Invalid note' }, 400)
 
     const supabase = createAdminClient()
-    const { error } = await supabase.rpc('set_campaign_status', { p_campaign_id: id, p_admin_id: actor.user.id, p_status: body.status })
+    const { error } = await supabase.rpc('set_campaign_status', { p_campaign_id: id, p_admin_id: actor.user.id, p_status: body.status, p_note: typeof body.note === 'string' ? body.note : null })
     if (error) {
       const failure = rpcFailure(error)
       return json({ error: failure.error }, failure.status)

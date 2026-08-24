@@ -81,7 +81,7 @@ Transitions (any other transition must raise):
 | `decide_payout(p_payout_id uuid, p_admin_id uuid, p_decision text, p_note text) returns void` | `p_decision` in ('approved','rejected'). Raises unless the actor's `profiles.role = 'admin'` — check it inside the function, do not trust the caller. Raises on an illegal transition. |
 | `mark_payout_paid(p_payout_id uuid, p_admin_id uuid, p_reference text) returns void` | `approved` → `paid`. Same admin check. |
 | `cancel_payout(p_payout_id uuid, p_owner_id uuid) returns void` | Owner cancels their own still-`requested` payout. |
-| `set_campaign_status(p_campaign_id uuid, p_admin_id uuid, p_status text) returns void` | Admin-only, validates the target status. |
+| `set_campaign_status(p_campaign_id uuid, p_admin_id uuid, p_status text, p_note text default null) returns void` | Admin-only, validates the target status, and records `review_note`/`reviewed_by`/`reviewed_at` in the same statement so the audit trail cannot drift from the decision. |
 
 ## API routes
 

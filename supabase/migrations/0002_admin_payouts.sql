@@ -318,7 +318,7 @@ $$;
 -- Admin-only moderation moves. Owners never come through here: the owner path
 -- is the ordinary column-granted UPDATE restricted by the API to
 -- active <-> paused. Target status is validated against the full lifecycle.
-create or replace function public.set_campaign_status(p_campaign_id uuid, p_admin_id uuid, p_status text)
+create or replace function public.set_campaign_status(p_campaign_id uuid, p_admin_id uuid, p_status text, p_note text default null)
 returns void
 language plpgsql
 security definer
@@ -334,7 +334,10 @@ begin
   end if;
 
   update public.campaigns
-     set status = p_status
+     set status = p_status,
+         review_note = coalesce(nullif(btrim(coalesce(p_note, '')), ''), review_note),
+         reviewed_by = p_admin_id,
+         reviewed_at = now()
    where id = p_campaign_id;
 
   if not found then
@@ -363,8 +366,10 @@ grant execute on function public.mark_payout_paid(uuid, uuid, text) to service_r
 revoke execute on function public.cancel_payout(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.cancel_payout(uuid, uuid) to service_role;
 
-revoke execute on function public.set_campaign_status(uuid, uuid, text) from public, anon, authenticated;
-grant execute on function public.set_campaign_status(uuid, uuid, text) to service_role;
+-- Drop the old 3-arg signature so the defaulted 4-arg one is unambiguous.
+drop function if exists public.set_campaign_status(uuid, uuid, text);
+revoke execute on function public.set_campaign_status(uuid, uuid, text, text) from public, anon, authenticated;
+grant execute on function public.set_campaign_status(uuid, uuid, text, text) to service_role;
 
 revoke execute on function public.is_staff() from public, anon, authenticated;
 grant execute on function public.is_staff() to authenticated;

@@ -24,11 +24,13 @@ It creates `profiles`, `campaigns`, `donations`, `payment_attempts`, `webhook_ev
 
 Fill in from **Project Settings → API**:
 
+Two credentials, three lines:
+
 | Variable | Value |
 |---|---|
-| `SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL` | Project URL |
-| `SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public key |
-| `SUPABASE_SERVICE_ROLE_KEY` | service_role key — **server only, never expose** |
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL — safe in the browser |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public key — safe in the browser; RLS is what protects the data |
+| `SUPABASE_SERVICE_ROLE_KEY` | service_role key — bypasses RLS. Server only, never prefix with `NEXT_PUBLIC_` |
 
 Under **Authentication → Providers**, enable Email. If you leave "Confirm email" on,
 sign-up will not return a session; see the note in `app/login/page.tsx`.
@@ -38,11 +40,23 @@ sign-up will not return a session; see the note in `app/login/page.tsx`.
 | Variable | Value |
 |---|---|
 | `SIFALO_API_BASE_URL` | Payments API base URL |
-| `SIFALO_API_KEY` | Server API key |
-| `SIFALO_WEBHOOK_SECRET` | HMAC-SHA256 shared secret |
+| `SIFALO_USERNAME` | Sifalo username |
+| `SIFALO_API_KEY` | Sifalo API key |
+| `SIFALO_WEBHOOK_SECRET` | Optional — see below |
 
-Point the provider's webhook at `POST /api/webhooks/sifalo`. It must send the
-hex HMAC-SHA256 of the raw body in the `x-sifalo-signature` header.
+Sent as HTTP Basic (`username:apiKey`). If Sifalo expects the pair as two separate
+headers instead, `authHeaders()` in `lib/server/sifalo.ts` is the only place to change.
+
+Point the provider's webhook at `POST /api/webhooks/sifalo`. It has two trust modes:
+
+- **`SIFALO_WEBHOOK_SECRET` set** — callbacks are verified by HMAC-SHA256 over the raw
+  body, sent hex-encoded in `x-sifalo-signature`. Preferred.
+- **Left blank** — the callback body is treated as an untrusted hint. Only the payment
+  reference is taken from it, and the real status is fetched from Sifalo's API before
+  anything is credited. Costs one extra API call per callback and is safe: forging a
+  donation would mean forging Sifalo's own API response.
+
+There is no third mode where an unsigned body is believed on its own.
 
 ## Architecture
 

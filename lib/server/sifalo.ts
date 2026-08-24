@@ -17,9 +17,20 @@ const FAILURE = new Set(['failed', 'declined', 'cancelled'])
 
 function getConfig() {
   const baseUrl = process.env.SIFALO_API_BASE_URL
+  const username = process.env.SIFALO_USERNAME
   const apiKey = process.env.SIFALO_API_KEY
-  if (!baseUrl || !apiKey) throw new Error('Sifalo is not configured')
-  return { baseUrl: baseUrl.replace(/\/$/, ''), apiKey }
+  if (!baseUrl || !username || !apiKey) throw new Error('Sifalo is not configured')
+  return { baseUrl: baseUrl.replace(/\/$/, ''), username, apiKey }
+}
+
+export function isSifaloConfigured(): boolean {
+  return Boolean(process.env.SIFALO_API_BASE_URL && process.env.SIFALO_USERNAME && process.env.SIFALO_API_KEY)
+}
+
+// HTTP Basic over the username/key pair. If Sifalo expects the pair as separate headers
+// instead, this is the only function that needs to change.
+function authHeaders(username: string, apiKey: string): Record<string, string> {
+  return { authorization: `Basic ${Buffer.from(`${username}:${apiKey}`).toString('base64')}` }
 }
 
 export function normaliseStatus(raw: string | undefined): SifaloStatus {
@@ -31,10 +42,10 @@ export function normaliseStatus(raw: string | undefined): SifaloStatus {
 }
 
 export async function createSifaloPayment(input: PaymentInput): Promise<SifaloResult> {
-  const { baseUrl, apiKey } = getConfig()
+  const { baseUrl, username, apiKey } = getConfig()
   const response = await fetch(`${baseUrl}/payments`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json', 'idempotency-key': input.reference },
+    headers: { ...authHeaders(username, apiKey), 'content-type': 'application/json', 'idempotency-key': input.reference },
     body: JSON.stringify({ amount: input.amountMinor / 100, currency: input.currency, phone: input.phone, reference: input.reference, callback_url: input.callbackUrl }),
     cache: 'no-store',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -46,15 +57,26 @@ export async function createSifaloPayment(input: PaymentInput): Promise<SifaloRe
   return { providerReference, status: normaliseStatus(data.status) }
 }
 
-/** Used by reconciliation when a webhook never arrived. */
-export async function getSifaloPayment(providerReference: string): Promise<SifaloResult> {
-  const { baseUrl, apiKey } = getConfig()
+/**
+ * Authoritative status straight from Sifalo. Used by reconciliation when a webhook never
+ * arrived, and by the webhook itself whenever the payload cannot be cryptographically
+ * trusted — asking the provider directly is the only way to know a payment is real.
+ */
+export async function getSifaloPayment(providerReference: string): Promise<SifaloResult & { amountMinor: number | null }> {
+  const { baseUrl, username, apiKey } = getConfig()
   const response = await fetch(`${baseUrl}/payments/${encodeURIComponent(providerReference)}`, {
-    headers: { authorization: `Bearer ${apiKey}` },
+    headers: authHeaders(username, apiKey),
     cache: 'no-store',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   if (!response.ok) throw new Error(`Sifalo lookup failed: ${response.status}`)
-  const data = await response.json() as { id?: string; reference?: string; status?: string }
-  return { providerReference: data.id ?? data.reference ?? providerReference, status: normaliseStatus(data.status) }
+  const data = await response.json() as { id?: string; reference?: string; status?: string; amount?: number | string; amount_minor?: number }
+  const amountMinor = typeof data.amount_minor === 'number' && Number.isSafeInteger(data.amount_minor)
+    ? data.amount_minor
+    : typeof data.amount === 'number' && Number.isFinite(data.amount)
+      ? Math.round(data.amount * 100)
+      : typeof data.amount === 'string' && /^\d+(\.\d{1,2})?$/.test(data.amount)
+        ? Math.round(Number(data.amount) * 100)
+        : null
+  return { providerReference: data.id ?? data.reference ?? providerReference, status: normaliseStatus(data.status), amountMinor }
 }

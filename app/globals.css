@@ -23,6 +23,7 @@
   --border: #e3eae2;
   /* previously hardcoded in components: avatar/badge tints and the progress track */
   --accent-soft: #dcece2; --accent-softer: #e4f1e8; --track: #e9eee8;
+  --tint-sun-bg: #f3ead6; --tint-sun-fg: #8a7136;
   --tint-sky-bg: #dcebf0; --tint-sky-fg: #467787;
   --tint-mint-bg: #e0eee3; --tint-mint-fg: #4e805d;
   --nav-surface: rgba(251,252,249,.94);
@@ -38,6 +39,7 @@
     --primary: #4cbd94; --primary-foreground: #07120d; --muted: #1b2621; --muted-foreground: #93a49c;
     --border: #24322c;
     --accent-soft: #1e3a2e; --accent-softer: #1a3227; --track: #253029;
+    --tint-sun-bg: #332d1c; --tint-sun-fg: #ceb886;
     --tint-sky-bg: #1c3038; --tint-sky-fg: #8fbecd;
     --tint-mint-bg: #1d3326; --tint-mint-fg: #8cc79c;
     --nav-surface: rgba(14,21,18,.94);
@@ -62,6 +64,7 @@ button { cursor: pointer; }
 .save-button { position: absolute; right: 12px; top: 12px; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(255,255,255,.9); color: var(--foreground); }
 .category-badge { position: absolute; bottom: 12px; left: 13px; border-radius: 999px; background: rgba(255,255,255,.9); padding: 5px 9px; color: var(--foreground); font-size: 10px; font-weight: 800; }
 .mini-avatar { width: 25px; height: 25px; }
+.mini-avatar.sun { background: var(--tint-sun-bg); color: var(--tint-sun-fg); }
 .mini-avatar.sky { background: var(--tint-sky-bg); color: var(--tint-sky-fg); } .mini-avatar.mint { background: var(--tint-mint-bg); color: var(--tint-mint-fg); }
 .progress-track { height: 6px; overflow: hidden; border-radius: 99px; background: var(--track); } .progress-fill { height: 100%; border-radius: inherit; background: var(--primary); }
 .donate-button, .confirm-button { display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); font-weight: 800; }

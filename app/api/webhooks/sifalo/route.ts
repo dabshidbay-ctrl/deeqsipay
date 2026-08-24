@@ -2,6 +2,9 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/server/supabase-admin'
 
+const SUCCESS = new Set(['success', 'succeeded', 'paid', 'completed'])
+const FAILURE = new Set(['failed', 'declined', 'cancelled', 'expired'])
+
 function validSignature(raw: string, signature: string | null) {
   const secret = process.env.SIFALO_WEBHOOK_SECRET
   if (!secret || !signature) return false
@@ -22,13 +25,21 @@ export async function POST(request: Request) {
     const supabase = createAdminClient()
     const payloadHash = createHash('sha256').update(raw).digest('hex')
     const { error: eventError } = await supabase.from('webhook_events').insert({ provider: 'sifalo', event_id: eventId, payload_hash: payloadHash })
-    if (eventError) return NextResponse.json({ received: true })
+    if (eventError) {
+      // 23505 = unique violation on (provider, event_id): a genuine replay, already handled.
+      if (eventError.code === '23505') return NextResponse.json({ received: true })
+      // Anything else is our failure. Return 500 so Sifalo retries — acknowledging here
+      // would silently drop a real payment.
+      return NextResponse.json({ error: 'Unable to process event' }, { status: 500 })
+    }
+
     const status = payload.status.toLowerCase()
+    const settled = SUCCESS.has(status) ? 'succeeded' : FAILURE.has(status) ? (status === 'expired' ? 'expired' : 'failed') : 'pending'
     const { data: attempt } = await supabase.from('payment_attempts').select('donation_id').eq('provider', 'sifalo').eq('provider_reference', providerReference).maybeSingle()
     if (attempt?.donation_id) {
-      if (['success', 'succeeded', 'paid', 'completed'].includes(status)) await supabase.rpc('credit_donation', { p_donation_id: attempt.donation_id, p_provider_reference: providerReference })
-      if (['failed', 'expired', 'cancelled'].includes(status)) await supabase.from('donations').update({ status: status === 'expired' ? 'expired' : 'failed' }).eq('id', attempt.donation_id).eq('status', 'pending')
-      await supabase.from('payment_attempts').update({ status: status === 'succeeded' ? 'succeeded' : status, raw_status: payload.status, updated_at: new Date().toISOString() }).eq('donation_id', attempt.donation_id).eq('provider_reference', providerReference)
+      if (settled === 'succeeded') await supabase.rpc('credit_donation', { p_donation_id: attempt.donation_id, p_provider_reference: providerReference })
+      if (settled === 'failed' || settled === 'expired') await supabase.from('donations').update({ status: settled, updated_at: new Date().toISOString() }).eq('id', attempt.donation_id).eq('status', 'pending')
+      await supabase.from('payment_attempts').update({ status: settled, raw_status: payload.status, updated_at: new Date().toISOString() }).eq('donation_id', attempt.donation_id).eq('provider_reference', providerReference)
     }
     await supabase.from('webhook_events').update({ processed_at: new Date().toISOString() }).eq('event_id', eventId).eq('provider', 'sifalo')
     return NextResponse.json({ received: true })

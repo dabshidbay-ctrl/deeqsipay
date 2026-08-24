@@ -29,9 +29,3 @@ export async function createSifaloPayment(input: PaymentInput): Promise<SifaloRe
   if (!providerReference) throw new Error('Sifalo response missing reference')
   return { providerReference, status: data.status === 'succeeded' ? 'succeeded' : 'pending' }
 }
-
-export function verifySifaloSignature(rawBody: string, signature: string | null) {
-  const secret = process.env.SIFALO_WEBHOOK_SECRET
-  if (!secret || !signature) return false
-  return signature === secret
-}

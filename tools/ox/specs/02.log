@@ -1,0 +1,6 @@
+[ox] stealth/ox-alpha <- tools/ox/specs/02-auth.md (9010 chars)
+[ox] 429 upstream, retry 1/6 in 4s
+[ox] 429 upstream, retry 2/6 in 8s
+[ox] 429 upstream, retry 3/6 in 16s
+[ox] 429 upstream, retry 4/6 in 32s
+[ox] 429 upstream, retry 5/6 in 60s

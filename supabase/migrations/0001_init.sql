@@ -245,3 +245,13 @@ drop policy if exists campaigns_select_own on public.campaigns;
 create policy campaigns_select_own on public.campaigns
   for select to authenticated
   using (owner_id = auth.uid());
+
+-- Donations must record the currency they were charged in: campaigns.currency is not
+-- always USD, and a donation's currency must never be re-derived from a campaign that
+-- could later change. Written as an ALTER so re-running the file adds it to an
+-- already-created table (create table if not exists would not).
+alter table public.donations add column if not exists currency char(3) not null default 'USD';
+
+-- Reconciliation sweeps pending donations oldest-first.
+create index if not exists donations_pending_created_at_idx
+  on public.donations (created_at) where status = 'pending';

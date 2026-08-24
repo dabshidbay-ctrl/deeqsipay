@@ -1,82 +1,137 @@
-type PaymentInput = {
-  amountMinor: number
-  currency: string
-  phone: string
-  reference: string
-  callbackUrl: string
+/**
+ * Sifalo Pay — verified against their official WooCommerce plugin (sifalo-pay),
+ * which is the only public description of this API.
+ *
+ *   POST https://api.sifalopay.com/gateway/
+ *   Authorization: Basic base64(api_user_id:api_key)
+ *   Content-Type: application/json
+ *   { amount, account, gateway, currency, channel, txn_order_id, url, ip, billing }
+ *
+ * Response: { code, response }. 601 is success; the 60x codes below are failures.
+ *
+ * IMPORTANT — this API is SYNCHRONOUS and has NO webhook and NO status-lookup
+ * endpoint for direct charges. The payer approves on their handset while the HTTP
+ * request is open, and the response IS the outcome. Consequences:
+ *   - There is nothing to poll and nothing to reconcile against. If the request
+ *     times out the true outcome is genuinely unknowable from our side, so the
+ *     donation stays 'pending' for a human to settle against the Sifalo portal.
+ *   - Do not "fix" a timeout by assuming success or failure. Either guess is wrong
+ *     half the time and one of them credits money that never arrived.
+ */
+
+export type SifaloWallet = 'zaad' | 'edahab' | 'pbwallet'
+
+export const SIFALO_WALLETS: ReadonlyArray<{ value: SifaloWallet; label: string; hint: string }> = [
+  { value: 'zaad', label: 'EVC Plus / ZAAD / SAHAL', hint: 'Hormuud, Telesom or Golis' },
+  { value: 'edahab', label: 'eDahab', hint: 'Somtel' },
+  { value: 'pbwallet', label: 'Premier Wallet', hint: 'Premier Bank' },
+]
+
+const WALLETS = new Set<string>(SIFALO_WALLETS.map((wallet) => wallet.value))
+export function isSifaloWallet(value: unknown): value is SifaloWallet {
+  return typeof value === 'string' && WALLETS.has(value)
 }
 
-export type SifaloStatus = 'pending' | 'succeeded' | 'failed' | 'expired'
-export type SifaloResult = { providerReference: string; status: SifaloStatus }
+// The payer is tapping a PIN into a handset while this request is open, so it needs a
+// far longer budget than an ordinary API call — but still a bounded one.
+const REQUEST_TIMEOUT_MS = 90_000
 
-// A hung provider must not hold a request (and a DB connection) open indefinitely.
-const REQUEST_TIMEOUT_MS = 15_000
+const SUCCESS_CODE = '601'
+const FAILURE_MESSAGES: Record<string, string> = {
+  '602': 'The payment did not go through. Check the number and try again.',
+  '603': 'There was not enough balance on that account.',
+  '604': 'That account number was not recognised.',
+  '605': 'The request timed out before it was approved.',
+  '606': 'Mobile money is temporarily unavailable. Please try again shortly.',
+}
 
-const SUCCESS = new Set(['success', 'succeeded', 'paid', 'completed'])
-const FAILURE = new Set(['failed', 'declined', 'cancelled'])
+export type SifaloOutcome =
+  | { status: 'succeeded'; providerReference: string; rawCode: string }
+  | { status: 'failed' | 'expired'; providerReference: string; rawCode: string; message: string }
+
+export class SifaloUnknownError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SifaloUnknownError'
+  }
+}
+
+type ChargeInput = {
+  amountMinor: number
+  currency: string
+  account: string
+  wallet: SifaloWallet
+  reference: string
+  originUrl: string
+  ip: string
+  billing?: string
+}
 
 function getConfig() {
-  const baseUrl = process.env.SIFALO_API_BASE_URL
-  const username = process.env.SIFALO_USERNAME
+  const baseUrl = process.env.SIFALO_API_BASE_URL ?? 'https://api.sifalopay.com/gateway/'
+  const apiUser = process.env.SIFALO_API_USER
   const apiKey = process.env.SIFALO_API_KEY
-  if (!baseUrl || !username || !apiKey) throw new Error('Sifalo is not configured')
-  return { baseUrl: baseUrl.replace(/\/$/, ''), username, apiKey }
+  if (!apiUser || !apiKey) throw new Error('Sifalo is not configured')
+  return { baseUrl: baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`, apiUser, apiKey }
 }
 
 export function isSifaloConfigured(): boolean {
-  return Boolean(process.env.SIFALO_API_BASE_URL && process.env.SIFALO_USERNAME && process.env.SIFALO_API_KEY)
+  return Boolean(process.env.SIFALO_API_USER && process.env.SIFALO_API_KEY)
 }
 
-// HTTP Basic over the username/key pair. If Sifalo expects the pair as separate headers
-// instead, this is the only function that needs to change.
-function authHeaders(username: string, apiKey: string): Record<string, string> {
-  return { authorization: `Basic ${Buffer.from(`${username}:${apiKey}`).toString('base64')}` }
+/** Amounts go to Sifalo in MAJOR units with 2 decimals; we hold minor units everywhere else. */
+function toMajorUnits(minor: number): string {
+  return (minor / 100).toFixed(2)
 }
 
-export function normaliseStatus(raw: string | undefined): SifaloStatus {
-  const status = (raw ?? '').toLowerCase()
-  if (SUCCESS.has(status)) return 'succeeded'
-  if (status === 'expired') return 'expired'
-  if (FAILURE.has(status)) return 'failed'
-  return 'pending'
-}
+export async function chargeSifalo(input: ChargeInput): Promise<SifaloOutcome> {
+  const { baseUrl, apiUser, apiKey } = getConfig()
+  const authorization = Buffer.from(`${apiUser}:${apiKey}`).toString('base64')
 
-export async function createSifaloPayment(input: PaymentInput): Promise<SifaloResult> {
-  const { baseUrl, username, apiKey } = getConfig()
-  const response = await fetch(`${baseUrl}/payments`, {
-    method: 'POST',
-    headers: { ...authHeaders(username, apiKey), 'content-type': 'application/json', 'idempotency-key': input.reference },
-    body: JSON.stringify({ amount: input.amountMinor / 100, currency: input.currency, phone: input.phone, reference: input.reference, callback_url: input.callbackUrl }),
-    cache: 'no-store',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  })
-  if (!response.ok) throw new Error(`Sifalo request failed: ${response.status}`)
-  const data = await response.json() as { id?: string; reference?: string; status?: string }
-  const providerReference = data.id ?? data.reference
-  if (!providerReference) throw new Error('Sifalo response missing reference')
-  return { providerReference, status: normaliseStatus(data.status) }
-}
+  let response: Response
+  try {
+    response = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { authorization: `Basic ${authorization}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        amount: toMajorUnits(input.amountMinor),
+        account: input.account,
+        gateway: input.wallet,
+        currency: input.currency,
+        channel: 'kindred',
+        txn_order_id: input.reference,
+        url: input.originUrl,
+        ip: input.ip,
+        billing: input.billing ?? '',
+      }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (caught) {
+    // Timed out or the connection dropped. The charge may or may not have completed
+    // upstream and there is no way to ask, so this is explicitly UNKNOWN.
+    throw new SifaloUnknownError(caught instanceof Error ? caught.message : 'Sifalo request failed')
+  }
 
-/**
- * Authoritative status straight from Sifalo. Used by reconciliation when a webhook never
- * arrived, and by the webhook itself whenever the payload cannot be cryptographically
- * trusted — asking the provider directly is the only way to know a payment is real.
- */
-export async function getSifaloPayment(providerReference: string): Promise<SifaloResult & { amountMinor: number | null }> {
-  const { baseUrl, username, apiKey } = getConfig()
-  const response = await fetch(`${baseUrl}/payments/${encodeURIComponent(providerReference)}`, {
-    headers: authHeaders(username, apiKey),
-    cache: 'no-store',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  })
-  if (!response.ok) throw new Error(`Sifalo lookup failed: ${response.status}`)
-  const data = await response.json() as { id?: string; reference?: string; status?: string; amount?: number | string; amount_minor?: number }
-  const amountMinor = typeof data.amount_minor === 'number' && Number.isSafeInteger(data.amount_minor)
-    ? data.amount_minor
-    : typeof data.amount === 'number' && Number.isFinite(data.amount)
-      ? Math.round(data.amount * 100)
-      : typeof data.amount === 'string' && /^\d+(\.\d{1,2})?$/.test(data.amount)
-        ? Math.round(Number(data.amount) * 100)
-        : null
-  return { providerReference: data.id ?? data.reference ?? providerReference, status: normaliseStatus(data.status), amountMinor }
+  if (!response.ok) throw new SifaloUnknownError(`Sifalo returned HTTP ${response.status}`)
+
+  let data: { code?: unknown; response?: unknown; sid?: unknown; txn_id?: unknown }
+  try {
+    data = await response.json() as typeof data
+  } catch {
+    throw new SifaloUnknownError('Sifalo returned a non-JSON response')
+  }
+
+  const code = data.code === undefined || data.code === null ? '' : String(data.code)
+  const providerReference = typeof data.txn_id === 'string' && data.txn_id !== ''
+    ? data.txn_id
+    : typeof data.sid === 'string' && data.sid !== ''
+      ? data.sid
+      : input.reference
+
+  if (code === SUCCESS_CODE) return { status: 'succeeded', providerReference, rawCode: code }
+
+  const message = FAILURE_MESSAGES[code]
+    ?? (typeof data.response === 'string' && data.response !== '' ? data.response : 'The payment could not be completed.')
+  return { status: code === '605' ? 'expired' : 'failed', providerReference, rawCode: code, message }
 }

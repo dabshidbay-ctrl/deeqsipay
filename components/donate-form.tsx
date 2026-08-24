@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { ApiError, AuthRequiredError, authedFetch } from '@/lib/supabase/session'
+import { SIFALO_WALLETS, type SifaloWallet } from '@/lib/server/sifalo'
 import { daysLeft, formatMoney, progressPercent, type Campaign } from '@/lib/campaigns'
 
 type Phase = 'idle' | 'submitting' | 'awaiting_confirmation' | 'succeeded' | 'failed' | 'expired' | 'timeout'
@@ -28,6 +29,8 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
   const [presetMinor, setPresetMinor] = useState<number | null>(null)
   const [customAmount, setCustomAmount] = useState('')
   const [phone, setPhone] = useState('')
+  // Sifalo routes by wallet and cannot infer it from the number, so it is required.
+  const [wallet, setWallet] = useState<SifaloWallet>('zaad')
   const [anonymous, setAnonymous] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [donationId, setDonationId] = useState<string | null>(null)
@@ -80,7 +83,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
       const data = await authedFetch<{ donationId?: string; status?: string }>('/api/donations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId: campaign.id, amountMinor, phone: phone.trim(), idempotencyKey: idempotencyRef.current, anonymous }),
+        body: JSON.stringify({ campaignId: campaign.id, amountMinor, phone: phone.trim(), idempotencyKey: idempotencyRef.current, anonymous, wallet }),
       })
       if (typeof data.donationId !== 'string' || typeof data.status !== 'string') throw new ApiError(502, 'Unexpected reply from the payment provider')
       setDonationId(data.donationId)
@@ -154,6 +157,22 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
                 placeholder="+252 61 555 1234" disabled={busy} className="amount-input" />
             </label>
             {phone.trim() !== '' && !phoneValid && <p className="text-xs font-semibold text-red-500" role="alert">Add the country code, e.g. +252615551234.</p>}
+            <fieldset>
+              <legend className="text-sm font-semibold">Pay from</legend>
+              <div className="mt-2 grid gap-2">
+                {SIFALO_WALLETS.map((option) => (
+                  <label key={option.value} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${wallet === option.value ? 'border-primary bg-accent-softer' : 'border-border bg-card'}`}>
+                    <input type="radio" name="wallet" value={option.value} checked={wallet === option.value}
+                      onChange={() => setWallet(option.value)} disabled={busy} className="size-4 accent-[var(--primary)]" />
+                    <span className="text-xs leading-5">
+                      <strong className="block font-semibold">{option.label}</strong>
+                      <span className="text-muted-foreground">{option.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3">
               <input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
               <span className="text-xs leading-5"><strong className="block font-semibold">Give anonymously</strong><span className="text-muted-foreground">Your name will show as &ldquo;Anonymous&rdquo; on this campaign. The organiser still sees your donation.</span></span>

@@ -1,19 +1,27 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient, requireUser } from '@/lib/server/supabase-admin'
-import { createSifaloPayment } from '@/lib/server/sifalo'
+import { chargeSifalo, isSifaloWallet, SifaloUnknownError } from '@/lib/server/sifalo'
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status })
+
+function clientIp(request: Request): string {
+  const forwarded = request.headers.get('x-forwarded-for')
+  if (forwarded) return forwarded.split(',')[0]?.trim() ?? '0.0.0.0'
+  return request.headers.get('x-real-ip') ?? '0.0.0.0'
+}
 
 export async function POST(request: Request) {
   try {
     const user = await requireUser(request)
     if (!user) return json({ error: 'Authentication required' }, 401)
-    const body = await request.json() as { campaignId?: string; amountMinor?: number; phone?: string; idempotencyKey?: string; anonymous?: boolean }
+    const body = await request.json() as { campaignId?: string; amountMinor?: number; phone?: string; idempotencyKey?: string; anonymous?: boolean; wallet?: unknown }
     if (!body.campaignId || !body.idempotencyKey || !body.phone || typeof body.amountMinor !== 'number' || !Number.isSafeInteger(body.amountMinor) || body.amountMinor < 100 || body.amountMinor > 1000000000) {
       return json({ error: 'Invalid donation request' }, 400)
     }
     if (!/^\+?[1-9]\d{7,14}$/.test(body.phone)) return json({ error: 'Invalid mobile number' }, 400)
     if (!/^[A-Za-z0-9_-]{16,80}$/.test(body.idempotencyKey)) return json({ error: 'Invalid idempotency key' }, 400)
+    // Sifalo routes by wallet, so this is required — it is not inferable from the number.
+    if (!isSifaloWallet(body.wallet)) return json({ error: 'Choose which mobile money account to pay from' }, 400)
 
     const supabase = createAdminClient()
 
@@ -43,15 +51,46 @@ export async function POST(request: Request) {
     }
 
     try {
-      const payment = await createSifaloPayment({ amountMinor: body.amountMinor, currency, phone: body.phone, reference: donation.id, callbackUrl: `${new URL(request.url).origin}/api/webhooks/sifalo` })
-      await supabase.from('payment_attempts').insert({ donation_id: donation.id, provider_reference: payment.providerReference, phone_last4: body.phone.slice(-4), status: payment.status })
-      if (payment.status === 'succeeded') await supabase.rpc('credit_donation', { p_donation_id: donation.id, p_provider_reference: payment.providerReference })
-      if (payment.status === 'failed' || payment.status === 'expired') await supabase.from('donations').update({ status: payment.status }).eq('id', donation.id).eq('status', 'pending')
-      return json({ donationId: donation.id, status: payment.status, providerReference: payment.providerReference }, 201)
-    } catch {
-      // The provider call may have timed out AFTER the charge was created upstream, so
-      // leave the donation pending for reconciliation rather than marking it failed.
-      return json({ donationId: donation.id, status: 'pending', error: 'Payment provider unavailable' }, 502)
+      // Sifalo is synchronous: the payer approves on their handset while this call is
+      // open, and the response is the final outcome. There is no webhook to wait for.
+      const outcome = await chargeSifalo({
+        amountMinor: body.amountMinor,
+        currency,
+        account: body.phone,
+        wallet: body.wallet,
+        reference: donation.id,
+        originUrl: new URL(request.url).origin,
+        ip: clientIp(request),
+      })
+
+      await supabase.from('payment_attempts').insert({
+        donation_id: donation.id,
+        provider_reference: outcome.providerReference,
+        phone_last4: body.phone.slice(-4),
+        status: outcome.status,
+        raw_status: outcome.rawCode,
+      })
+
+      if (outcome.status === 'succeeded') {
+        await supabase.rpc('credit_donation', { p_donation_id: donation.id, p_provider_reference: outcome.providerReference })
+        return json({ donationId: donation.id, status: 'succeeded', providerReference: outcome.providerReference }, 201)
+      }
+
+      await supabase.from('donations').update({ status: outcome.status, updated_at: new Date().toISOString() }).eq('id', donation.id).eq('status', 'pending')
+      return json({ donationId: donation.id, status: outcome.status, error: outcome.message }, 200)
+    } catch (caught) {
+      // Timeout or transport failure. Sifalo offers no way to look a charge up afterwards,
+      // so the outcome is genuinely unknown: leave it pending for manual settlement rather
+      // than guessing. Guessing 'failed' hides money that did arrive; guessing 'succeeded'
+      // credits money that did not.
+      const unknown = caught instanceof SifaloUnknownError
+      return json({
+        donationId: donation.id,
+        status: 'pending',
+        error: unknown
+          ? 'We lost contact with Sifalo before confirming. If money left your account it will be credited once we reconcile — do not pay again.'
+          : 'Payment provider unavailable',
+      }, 502)
     }
   } catch { return json({ error: 'Invalid request' }, 400) }
 }

@@ -1,17 +1,22 @@
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/server/supabase-admin'
-import { getSifaloPayment } from '@/lib/server/sifalo'
 
-// Webhooks get lost: the provider drops one, our 500 exhausts its retries, or the
-// create call timed out after the charge already existed upstream. Without this sweep
-// those donations stay 'pending' forever and the campaign is never credited.
+/**
+ * Sifalo's gateway API is synchronous and offers NO webhook and NO way to look a charge
+ * up after the fact. So a donation can only be left 'pending' when our request to Sifalo
+ * timed out or the connection dropped — and in that case the true outcome is genuinely
+ * unknowable from our side.
+ *
+ * This job therefore does NOT confirm payments; it cannot. It ages out stale unknowns so
+ * they stop sitting in the UI forever, and reports what it found so a human can settle
+ * them against the Sifalo merchant portal. Anything it expires may still have been paid,
+ * which is exactly why it never touches raised_minor.
+ */
 
-const STALE_AFTER_MS = 5 * 60 * 1000
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000 // older than this is written off as expired
-const BATCH = 50
-
-type PendingDonation = { id: string; created_at: string; payment_attempts: { provider_reference: string }[] | null }
+const STALE_AFTER_MS = 30 * 60 * 1000
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+const BATCH = 200
 
 function authorised(request: Request) {
   const secret = process.env.CRON_SECRET
@@ -26,44 +31,31 @@ export async function POST(request: Request) {
   if (!authorised(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const supabase = createAdminClient()
-  const cutoff = new Date(Date.now() - STALE_AFTER_MS).toISOString()
+  const now = Date.now()
   const { data, error } = await supabase
     .from('donations')
-    .select('id,created_at,payment_attempts(provider_reference)')
+    .select('id,created_at,amount_minor,currency,campaign_id')
     .eq('status', 'pending')
-    .lt('created_at', cutoff)
+    .lt('created_at', new Date(now - STALE_AFTER_MS).toISOString())
     .order('created_at', { ascending: true })
     .limit(BATCH)
   if (error) return NextResponse.json({ error: 'Unable to load pending donations' }, { status: 500 })
 
-  const pending = (data ?? []) as unknown as PendingDonation[]
-  let credited = 0
-  let failed = 0
-  let stillPending = 0
+  const pending = data ?? []
+  const expirable = pending.filter((donation) => now - new Date(donation.created_at).getTime() > MAX_AGE_MS)
 
-  for (const donation of pending) {
-    // Fall back to donation.id: that is the `reference` we sent the provider, and it is
-    // all we have when the create call timed out before an attempt row was written.
-    const reference = donation.payment_attempts?.[0]?.provider_reference ?? donation.id
-    try {
-      const result = await getSifaloPayment(reference)
-      if (result.status === 'succeeded') {
-        await supabase.rpc('credit_donation', { p_donation_id: donation.id, p_provider_reference: result.providerReference })
-        credited += 1
-      } else if (result.status === 'failed' || result.status === 'expired') {
-        await supabase.from('donations').update({ status: result.status, updated_at: new Date().toISOString() }).eq('id', donation.id).eq('status', 'pending')
-        failed += 1
-      } else if (Date.now() - new Date(donation.created_at).getTime() > MAX_AGE_MS) {
-        await supabase.from('donations').update({ status: 'expired', updated_at: new Date().toISOString() }).eq('id', donation.id).eq('status', 'pending')
-        failed += 1
-      } else {
-        stillPending += 1
-      }
-    } catch {
-      // Provider unreachable for this one; the next sweep retries it.
-      stillPending += 1
-    }
+  if (expirable.length > 0) {
+    await supabase
+      .from('donations')
+      .update({ status: 'expired', updated_at: new Date().toISOString() })
+      .in('id', expirable.map((donation) => donation.id))
+      .eq('status', 'pending')
   }
 
-  return NextResponse.json({ examined: pending.length, credited, failed, stillPending })
+  // Everything still listed here needs a person to check the Sifalo portal.
+  return NextResponse.json({
+    needsManualSettlement: pending.length - expirable.length,
+    expired: expirable.length,
+    oldestPendingAt: pending[0]?.created_at ?? null,
+  })
 }

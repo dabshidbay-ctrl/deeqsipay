@@ -24,6 +24,7 @@ export default function CreatePage() {
   const [goal, setGoal] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [submitted, setSubmitted] = useState(false)
 
   const goalInvalid = goal.trim() !== '' && parseGoalMinor(goal.trim()) === null
 
@@ -45,12 +46,24 @@ export default function CreatePage() {
         body: JSON.stringify({ title: cleanTitle, description: cleanDescription, category, goalMinor }),
       })
       if (typeof data.campaign?.id !== 'string') throw new ApiError(502, 'Unexpected response from the server')
-      router.push(`/campaigns/${data.campaign.id}`)
+      setSubmitted(true)
     } catch (err) {
       if (err instanceof AuthRequiredError) { router.push('/login?next=/create'); return }
       setError(err instanceof ApiError ? err.message : 'We could not reach the network. Please try again.')
       setSubmitting(false)
     }
+  }
+
+  if (submitted) {
+    return <main className="min-h-screen bg-background text-foreground"><div className="mx-auto flex min-h-screen max-w-[470px] flex-col justify-center border-x border-border bg-background px-6">
+      <p className="eyebrow">Submitted for review</p>
+      <h1 className="mt-3 font-serif text-[32px] font-semibold leading-tight tracking-[-0.035em]">Your story is with our team.</h1>
+      <p className="mt-4 text-sm leading-7 text-muted-foreground">Every fundraiser is reviewed by a person before it goes live — it keeps donors safe and your campaign trusted. You will see it go public as soon as it is approved.</p>
+      <div className="mt-8 space-y-3">
+        <Link href="/dashboard" className="confirm-button">Go to your dashboard</Link>
+        <Link href="/explore" className="block py-1 text-center text-xs font-bold text-primary">Explore other campaigns</Link>
+      </div>
+    </div></main>
   }
 
   return (

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const body = await request.json() as { title?: string; description?: string; category?: string; goalMinor?: number; imageUrl?: string }
     if (!body.title || body.title.length < 8 || body.title.length > 120 || !body.description || body.description.length < 20 || body.description.length > 5000 || !body.category || !categories.has(body.category) || typeof body.goalMinor !== 'number' || !Number.isSafeInteger(body.goalMinor) || body.goalMinor < 100) return NextResponse.json({ error: 'Invalid campaign details' }, { status: 400 })
     if (body.imageUrl !== undefined && body.imageUrl !== null && !isSafeImageUrl(body.imageUrl)) return NextResponse.json({ error: 'Campaign image must be a public https URL' }, { status: 400 })
-    const { data, error } = await createAdminClient().from('campaigns').insert({ owner_id: user.id, title: body.title.trim(), description: body.description.trim(), category: body.category, goal_minor: body.goalMinor, image_url: body.imageUrl ?? null, status: 'active' }).select('id,title,status').single()
+    const { data, error } = await createAdminClient().from('campaigns').insert({ owner_id: user.id, title: body.title.trim(), description: body.description.trim(), category: body.category, goal_minor: body.goalMinor, image_url: body.imageUrl ?? null, status: 'under_review' }).select('id,title,status').single()
     if (error) return NextResponse.json({ error: 'Unable to create campaign' }, { status: 500 })
     return NextResponse.json({ campaign: data }, { status: 201 })
   } catch { return NextResponse.json({ error: 'Invalid request' }, { status: 400 }) }

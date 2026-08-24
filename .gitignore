@@ -15,3 +15,6 @@ node_modules
 .DS_Store
 # Local tooling secrets
 .env.ox
+
+# TS incremental build cache
+tsconfig.tsbuildinfo

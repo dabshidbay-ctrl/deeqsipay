@@ -3,7 +3,12 @@ import { createAdminClient, requireUser } from '@/lib/server/supabase-admin'
 import { isSafeImageUrl } from '@/lib/server/validation'
 
 const categories = new Set(['Medical', 'Emergency', 'Community', 'Nonprofit', 'Education'])
+// What an OWNER may set. Note the absence of 'under_review', 'hidden', 'rejected' and
+// 'removed': those are admin-only verdicts. 'active' is listed only so an owner can
+// un-pause — the .in() guard on the update below is what stops them using it to approve
+// a campaign that is still awaiting review.
 const statuses = new Set(['active', 'paused', 'completed'])
+const OWNER_EDITABLE_FROM = ['active', 'paused', 'completed']
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -46,7 +51,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       patch.status = body.status
     }
     if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Invalid campaign details' }, { status: 400 })
-    const { data, error } = await createAdminClient().from('campaigns').update(patch).eq('id', id).eq('owner_id', user.id).select('id,title,status').maybeSingle()
+    const { data, error } = await createAdminClient().from('campaigns').update(patch).eq('id', id).eq('owner_id', user.id).in('status', OWNER_EDITABLE_FROM).select('id,title,status').maybeSingle()
     if (error) return NextResponse.json({ error: 'Unable to update campaign' }, { status: 500 })
     if (!data) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     return NextResponse.json({ campaign: data })

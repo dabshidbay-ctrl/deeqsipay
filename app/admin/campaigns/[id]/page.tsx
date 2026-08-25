@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Phone } from 'lucide-react'
 import { formatMoney, initials, progressPercent } from '@/lib/campaigns'
 import { ReadOnlyNote, StatusBadge } from '../../_components/admin-ui'
 import { embedded, requireStaff, shortDate } from '../../_lib/admin'
 import { CampaignActions } from './campaign-actions'
+import { IdentityViewer } from './identity-viewer'
 
 type OwnerEmbed = { display_name: string | null }
 type CampaignDetail = {
@@ -22,6 +23,8 @@ type CampaignDetail = {
   created_at: string
   owner_id: string
   review_note: string | null
+  contact_phones: string[] | null
+  identity_document_path: string | null
   reviewed_at: string | null
   profiles: OwnerEmbed | OwnerEmbed[] | null
 }
@@ -32,7 +35,7 @@ export default async function AdminCampaignDetailPage({ params }: { params: Prom
 
   const { data } = await supabase
     .from('campaigns')
-    .select('id,title,description,category,status,goal_minor,raised_minor,donor_count,currency,image_url,ends_at,created_at,owner_id,review_note,reviewed_at,profiles!campaigns_owner_id_fkey(display_name)')
+    .select('id,title,description,category,status,goal_minor,raised_minor,donor_count,currency,image_url,ends_at,created_at,owner_id,review_note,reviewed_at,contact_phones,identity_document_path,profiles!campaigns_owner_id_fkey(display_name)')
     .eq('id', id)
     .maybeSingle()
 
@@ -42,6 +45,7 @@ export default async function AdminCampaignDetailPage({ params }: { params: Prom
   const owner = embedded(campaign.profiles)
   const person = owner?.display_name?.trim() || 'Unnamed organiser'
   const percent = progressPercent(campaign.raised_minor, campaign.goal_minor)
+  const contactPhones = Array.isArray(campaign.contact_phones) ? campaign.contact_phones : []
 
   return <div>
     <header className="flex items-center gap-4 pb-5 pt-2">
@@ -87,6 +91,26 @@ export default async function AdminCampaignDetailPage({ params }: { params: Prom
       <span className="text-muted-foreground">·</span>
       <Link href={`/campaigns/${campaign.id}`} className="inline-flex items-center gap-1">Public page <ExternalLink size={12} /></Link>
     </div>
+
+    <section className="mt-8">
+      <p className="eyebrow">Verification</p>
+      <div className="mt-3 rounded-2xl border border-border bg-card p-4">
+        <p className="text-sm font-semibold">Contact numbers</p>
+        {contactPhones.length === 0
+          ? <p className="mt-2 text-xs text-muted-foreground">None on file.</p>
+          : <ul className="mt-2 space-y-1">{contactPhones.map((phone) => (
+              <li key={phone} className="flex items-center gap-2 text-sm">
+                <Phone size={13} className="shrink-0 text-primary" />
+                <a href={`tel:${phone}`} className="font-medium">{phone}</a>
+              </li>
+            ))}</ul>}
+      </div>
+      {/* Admins only. A moderator may review a campaign's content, but read-only access
+          is not a reason to look at someone's passport. */}
+      {role === 'admin'
+        ? <IdentityViewer campaignId={campaign.id} hasDocument={campaign.identity_document_path !== null && campaign.identity_document_path !== ''} />
+        : <p className="mt-3 rounded-xl border border-dashed border-border p-4 text-xs leading-5 text-muted-foreground">Identity documents are visible to admins only.</p>}
+    </section>
 
     {role === 'admin'
       ? <CampaignActions campaignId={campaign.id} currentStatus={campaign.status} />

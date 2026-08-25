@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase/server'
 
@@ -22,7 +23,9 @@ function asStaffRole(value: unknown): StaffRole | null {
  * confirm its own existence. The layout calls this, and so does every page, because a
  * layout and its page render in parallel and a layout alone would not stop a page's read.
  */
-export async function requireStaff() {
+// Deliberately cached: a layout and its page render in parallel and BOTH call this, so
+// without dedupe every admin page paid for two auth round trips and two profile reads.
+export const requireStaff = cache(async () => {
   // Anything that goes wrong reaching Supabase — unconfigured env, network, a failed
   // role lookup — must read as "not staff", never as a 500. A crash here would both
   // confirm the segment exists and hand a stranger a stack trace.
@@ -45,7 +48,7 @@ export async function requireStaff() {
   // above — swallowing it there would let an unauthorised request continue.
   if (resolved === null) notFound()
   return resolved
-}
+})
 
 /** PostgREST returns an object for a to-one embed; supabase-js can surface it as an array. */
 export function embedded<T>(value: T | T[] | null | undefined): T | null {

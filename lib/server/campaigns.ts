@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache'
 import { createAuthClient } from '@/lib/server/supabase-admin'
 import { mapCampaignRow, type Campaign } from '@/lib/campaigns'
 
@@ -5,7 +6,7 @@ import { mapCampaignRow, type Campaign } from '@/lib/campaigns'
 const CAMPAIGN_SELECT = 'id,title,description,category,goal_minor,raised_minor,donor_count,currency,image_url,ends_at,created_at, profiles!campaigns_owner_id_fkey(display_name, avatar_url)'
 const DEFAULT_LIMIT = 50
 
-export async function listCampaigns(opts?: { category?: string; limit?: number }): Promise<Campaign[]> {
+async function fetchCampaigns(opts?: { category?: string; limit?: number }): Promise<Campaign[]> {
   // Unconfigured Supabase env should render an empty feed, not a 500.
   let supabase
   try { supabase = createAuthClient() } catch { return [] }
@@ -36,3 +37,17 @@ export async function getCampaign(id: string): Promise<Campaign | null> {
   if (error !== null || data === null) return null
   return mapCampaignRow(data as Record<string, unknown>)
 }
+
+/**
+ * The public campaign list is identical for every visitor, so it does not need to be
+ * re-queried per request. Safe to cache here because this path uses the plain anon client
+ * and reads no cookies — nothing about it varies by user.
+ *
+ * 30s means a newly approved campaign appears within half a minute; anything that must be
+ * immediate should call revalidateTag('campaigns').
+ */
+export const listCampaigns = unstable_cache(
+  fetchCampaigns,
+  ['campaigns-list'],
+  { revalidate: 30, tags: ['campaigns'] },
+)

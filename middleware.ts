@@ -40,5 +40,17 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|avif)$).*)'],
+  // Only the paths that actually need a gate. The previous catch-all matcher ran
+  // supabase.auth.getUser() — a network call to Supabase's auth server — on every public
+  // page view, adding a round trip to pages that do not care who you are.
+  // /admin is deliberately absent: it gates itself with notFound() so it returns a plain
+  // 404 rather than redirecting to login and revealing that it exists.
+  matcher: [
+    '/create/:path*',
+    '/dashboard/:path*',
+    '/profile/:path*',
+    '/saved/:path*',
+    '/settings/:path*',
+    '/notifications/:path*',
+  ],
 }

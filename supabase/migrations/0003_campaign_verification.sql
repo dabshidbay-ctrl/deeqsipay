@@ -14,19 +14,31 @@ alter table public.campaigns add column if not exists identity_verified_at times
 -- actually verify a human is behind it.
 alter table public.campaigns add column if not exists contact_phones text[] not null default '{}'::text[];
 
+-- Postgres forbids subqueries inside a CHECK constraint (SQLSTATE 0A000), but a function
+-- body may contain them. This is genuinely IMMUTABLE: it looks only at its argument.
+create or replace function public.valid_contact_phones(p_phones text[])
+returns boolean
+language sql
+immutable
+set search_path = pg_catalog, public
+as $$
+  select p_phones is not null
+     and array_length(p_phones, 1) between 2 and 5
+     -- distinct: no padding the list with the same number twice
+     and array_length(p_phones, 1) = (select count(distinct phone) from unnest(p_phones) as phone)
+     and not exists (select 1 from unnest(p_phones) as phone where phone !~ '^\+?[1-9][0-9]{7,14}$');
+$$;
+
+-- NOT VALID: enforced on every INSERT and on any UPDATE of a row, but existing rows are
+-- not re-checked. That matters because 0002 already removed the 'draft' status, so there
+-- is no state left to park a legacy campaign in — and a plain constraint would abort this
+-- migration on any campaign created before contact numbers were required.
+-- Run `alter table public.campaigns validate constraint campaigns_contact_phones_check;`
+-- once those rows have been given numbers.
 alter table public.campaigns drop constraint if exists campaigns_contact_phones_check;
 alter table public.campaigns
   add constraint campaigns_contact_phones_check
-  check (
-    -- Only enforced once a campaign leaves 'draft': it must carry >= 2 distinct numbers,
-    -- each plausibly a phone number, and no more than 5.
-    status = 'draft'
-    or (
-      array_length(contact_phones, 1) between 2 and 5
-      and array_length(contact_phones, 1) = (select count(distinct phone) from unnest(contact_phones) as phone)
-      and not exists (select 1 from unnest(contact_phones) as phone where phone !~ '^\+?[1-9][0-9]{7,14}$')
-    )
-  );
+  check (public.valid_contact_phones(contact_phones)) not valid;
 
 -- An organiser must not be able to mark their own identity as verified.
 revoke insert, update on public.campaigns from anon, authenticated;

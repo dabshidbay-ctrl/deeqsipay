@@ -19,18 +19,10 @@
  *     half the time and one of them credits money that never arrived.
  */
 
-export type SifaloWallet = 'zaad' | 'edahab' | 'pbwallet'
-
-export const SIFALO_WALLETS: ReadonlyArray<{ value: SifaloWallet; label: string; hint: string }> = [
-  { value: 'zaad', label: 'EVC Plus / ZAAD / SAHAL', hint: 'Hormuud, Telesom or Golis' },
-  { value: 'edahab', label: 'eDahab', hint: 'Somtel' },
-  { value: 'pbwallet', label: 'Premier Wallet', hint: 'Premier Bank' },
-]
-
-const WALLETS = new Set<string>(SIFALO_WALLETS.map((wallet) => wallet.value))
-export function isSifaloWallet(value: unknown): value is SifaloWallet {
-  return typeof value === 'string' && WALLETS.has(value)
-}
+// Wallet constants live in lib/wallets.ts so client components can import them without
+// dragging this module — and its credential handling — into the browser bundle.
+export { SIFALO_WALLETS, isSifaloWallet, type SifaloWallet } from '@/lib/wallets'
+import type { SifaloWallet } from '@/lib/wallets'
 
 // The payer is tapping a PIN into a handset while this request is open, so it needs a
 // far longer budget than an ordinary API call — but still a bounded one.

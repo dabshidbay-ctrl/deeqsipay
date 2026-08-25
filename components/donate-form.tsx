@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { ApiError, AuthRequiredError, authedFetch } from '@/lib/supabase/session'
-import { SIFALO_WALLETS, type SifaloWallet } from '@/lib/server/sifalo'
+import { SIFALO_WALLETS, type SifaloWallet } from '@/lib/wallets'
 import { daysLeft, formatMoney, progressPercent, type Campaign } from '@/lib/campaigns'
 
 type Phase = 'idle' | 'submitting' | 'awaiting_confirmation' | 'succeeded' | 'failed' | 'expired' | 'timeout'

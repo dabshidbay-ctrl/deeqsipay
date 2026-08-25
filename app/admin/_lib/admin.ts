@@ -5,7 +5,9 @@ import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase/serve
 export type StaffRole = 'admin' | 'moderator'
 
 export const CAMPAIGN_STATUSES = ['under_review', 'active', 'paused', 'hidden', 'completed', 'rejected', 'removed'] as const
-export const DONATION_STATUSES = ['pending', 'succeeded', 'failed', 'expired'] as const
+// 'refunded' is a terminal donation status written by refund_donation(); it is listed
+// after 'succeeded' because that is the only status a refund can come from.
+export const DONATION_STATUSES = ['pending', 'succeeded', 'refunded', 'failed', 'expired'] as const
 export const PAYOUT_STATUSES = ['requested', 'approved', 'paid', 'rejected', 'cancelled'] as const
 
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number]
@@ -51,9 +53,10 @@ export function embedded<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null
 }
 
-export function statusLabel(status: string): string {
-  return status.replace(/_/g, ' ')
-}
+/** Lives in _components/admin-ui so client components can use those pieces without
+ *  pulling this server-only module in behind them. Re-exported here so the pages that
+ *  already import it from _lib/admin keep working. */
+export { statusLabel } from '../_components/admin-ui'
 
 export function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })

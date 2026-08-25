@@ -1,5 +1,15 @@
 import Link from 'next/link'
-import { statusLabel } from '../_lib/admin'
+
+/**
+ * Defined here rather than imported from _lib/admin, and re-exported by that module so
+ * every existing caller is unaffected. _lib/admin reaches for the server-only Supabase
+ * client, so importing it from this file would drag `next/headers` into the bundle of any
+ * client component that reuses these presentational pieces — and they are meant to be
+ * reusable from both sides of the boundary.
+ */
+export function statusLabel(status: string): string {
+  return status.replace(/_/g, ' ')
+}
 
 // Statuses that mean "this is live and well", "this needs a human", and "this is over".
 const GOOD = new Set(['active', 'completed', 'succeeded', 'approved', 'paid'])

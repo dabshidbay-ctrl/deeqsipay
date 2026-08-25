@@ -6,6 +6,7 @@ import { ReadOnlyNote, StatusBadge } from '../../_components/admin-ui'
 import { embedded, requireStaff, shortDate } from '../../_lib/admin'
 import { CampaignActions } from './campaign-actions'
 import { IdentityViewer } from './identity-viewer'
+import { LedgerPanel } from './ledger-panel'
 
 type OwnerEmbed = { display_name: string | null }
 type CampaignDetail = {
@@ -111,6 +112,10 @@ export default async function AdminCampaignDetailPage({ params }: { params: Prom
         ? <IdentityViewer campaignId={campaign.id} hasDocument={campaign.identity_document_path !== null && campaign.identity_document_path !== ''} />
         : <p className="mt-3 rounded-xl border border-dashed border-border p-4 text-xs leading-5 text-muted-foreground">Identity documents are visible to admins only.</p>}
     </section>
+
+    {/* Readable by staff of either role: the ledger is the auditable record behind
+        raised_minor, and a moderator reviewing a campaign needs to see it too. */}
+    <LedgerPanel campaignId={campaign.id} />
 
     {role === 'admin'
       ? <CampaignActions campaignId={campaign.id} currentStatus={campaign.status} />

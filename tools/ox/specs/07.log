@@ -1,1 +1,10 @@
 [ox] stealth/ox-alpha <- tools/ox/specs/07-ledger-refunds.md (31983 chars)
+[ox] 305.4s | tokens 22632 | wrote 1 files
+  supabase/migrations/0004_ledger_refunds.sql
+
+NOTES:- Sign CHECK reading: spec said "donation and positive adjustment are > 0"; implemented as adjustment strictly > 0 (negative adjustments rejected). Flag if bidirectional adjustments were intended.
+- refund_donation follows step 6 verbatim (unclamped raised_minor). If a campaign's counter is already inconsistent (below the refunded amount), the campaigns.raised_minor >= 0 CHECK aborts the whole refund — deliberate fail-loud, but operators should know.
+- Residual risk: TRUNCATE bypasses row-level BEFORE triggers; the immutability trigger covers UPDATE/DELETE only, per spec.
+- A refund racing a concurrent payout approval can legitimately drive the true balance negative; that is why the unclamped campaign_balance_minor exists. request_payout still spends against the clamped figure.
+- Backfill assumes donations.currency is populated on all legacy rows (guaranteed: 0001 added it NOT NULL DEFAULT 'USD').
+=== END NOTES ===

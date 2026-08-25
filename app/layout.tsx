@@ -45,7 +45,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="bg-background">
-      <body className={`${dmSans.variable} ${dmSerif.variable} antialiased`}>
+      {/* Browser extensions (password managers, ColorZilla, Grammarly) inject attributes
+          onto <body> before React hydrates, which React reports as a mismatch we cannot
+          fix. This suppresses the diff for THIS element's own attributes only — it does
+          not extend to children, so a genuine mismatch anywhere in the tree still surfaces. */}
+      <body suppressHydrationWarning className={`${dmSans.variable} ${dmSerif.variable} antialiased`}>
         <AuthProvider>{children}</AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

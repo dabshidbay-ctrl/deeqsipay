@@ -8,8 +8,8 @@ const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-dm-sans' })
 const dmSerif = DM_Serif_Display({ subsets: ['latin'], weight: '400', variable: '--font-dm-serif' })
 
 export const metadata: Metadata = {
-  title: 'kindred — funding good things',
-  description: 'Discover people and causes making a difference, and be part of their story.',
+  title: 'Kindred',
+  description: 'Fundraising for people and causes.',
   generator: 'v0.app',
   icons: {
     icon: [

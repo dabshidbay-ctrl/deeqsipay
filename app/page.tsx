@@ -1,4 +1,3 @@
-import { Plus, Sparkles } from 'lucide-react'
 import { HomeFeed } from '@/components/home-feed'
 import { PageFrame } from '@/components/kindred-shell'
 import Link from 'next/link'
@@ -22,9 +21,9 @@ async function getDisplayName(): Promise<string> {
 
 export default async function Page() {
   const [campaigns, displayName] = await Promise.all([listCampaigns(), getDisplayName()])
-  return <PageFrame active="home" eyebrow="funding good things">
-    <section className="px-5 pb-5 pt-8"><p className="eyebrow">Good morning, {displayName}</p><h1 className="mt-2 max-w-[350px] font-serif text-[39px] font-semibold leading-[1.04] tracking-[-0.045em]">Small acts.<br /><em className="text-primary">Big ripples.</em></h1><p className="mt-4 max-w-[320px] text-sm leading-6 text-muted-foreground">Discover people and causes making a difference — and be part of their story.</p></section>
+  return <PageFrame active="home" eyebrow="Fundraising for people and causes">
+    <section className="px-5 pb-5 pt-8"><h1 className="max-w-[360px] font-serif text-[34px] font-semibold leading-[1.08] tracking-[-0.02em]">Fund causes you care about.</h1><p className="mt-3 max-w-[330px] text-sm leading-6 text-muted-foreground">Browse active fundraisers and give directly to the people running them.</p></section>
     <HomeFeed campaigns={campaigns} />
-    <section className="mx-5 mt-7 rounded-2xl bg-primary p-5 text-primary-foreground"><div className="flex items-start justify-between"><div><Sparkles size={19} /><h2 className="mt-3 font-serif text-[23px] font-semibold leading-tight">Your kindness<br />can start a story.</h2></div><div className="rounded-full border border-primary-foreground/20 p-2"><Plus size={20} /></div></div><p className="mt-3 text-xs leading-5 text-primary-foreground/70">Have a cause close to your heart? Create a fundraiser and invite your community in.</p><Link href="/create" className="mt-4 inline-block rounded-full bg-background px-4 py-2.5 text-xs font-bold text-foreground">Start a fundraiser</Link></section>
+    <section className="mx-5 mt-8 rounded-xl border border-border p-5"><h2 className="font-serif text-xl font-semibold tracking-[-0.01em]">Running a fundraiser?</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Create one and share it with your community. Every campaign is reviewed before it goes live.</p><Link href="/create" className="confirm-button mt-4 inline-flex w-auto px-4">Start a fundraiser</Link></section>
   </PageFrame>
 }

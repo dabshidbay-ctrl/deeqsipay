@@ -4,7 +4,7 @@ import { ArrowUpRight, Mail, ShieldCheck } from 'lucide-react'
 export function KindredFooter() {
   return <footer className="mt-12 border-t border-border px-5 pb-8 pt-7">
     <div className="flex items-start justify-between gap-4">
-      <div><p className="font-serif text-xl font-semibold tracking-[-0.03em]">kindred</p><p className="mt-2 max-w-[220px] text-xs leading-5 text-muted-foreground">Small acts become meaningful change when we do them together.</p></div>
+      <div><p className="font-serif text-xl font-semibold tracking-[-0.03em]">kindred</p><p className="mt-2 max-w-[220px] text-xs leading-5 text-muted-foreground">Fundraising for people and causes.</p></div>
       <div className="grid size-9 place-items-center rounded-full bg-muted text-primary"><ShieldCheck size={17} /></div>
     </div>
     <div className="mt-7 grid grid-cols-2 gap-6 text-xs">

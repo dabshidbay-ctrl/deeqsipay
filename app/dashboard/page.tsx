@@ -34,26 +34,26 @@ export default async function DashboardPage() {
   if (!user) redirect('/login?next=/dashboard')
   const supabase = await createSupabaseServerClient()
 
-  const { data: campaignRows } = await supabase
-    .from('campaigns')
-    .select('id,title,status,goal_minor,raised_minor,donor_count,currency,created_at')
-    .eq('owner_id', user.id)
-    .order('created_at', { ascending: false })
+  // These two used to run in series: campaigns first, then donations filtered by the
+  // resulting ids. Each Supabase round trip costs real latency, so the donations query
+  // now filters through an inner join on the campaign owner instead, letting both run
+  // at once. RLS (donations_select_own_or_campaign_owner) is still what authorises the
+  // read — the owner filter is a narrowing condition, not the security boundary.
+  const [{ data: campaignRows }, { data: donationRows }] = await Promise.all([
+    supabase
+      .from('campaigns')
+      .select('id,title,status,goal_minor,raised_minor,donor_count,currency,created_at')
+      .eq('owner_id', user.id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('donations')
+      .select('id,amount_minor,currency,status,created_at,is_anonymous,campaign_id,profiles!donations_donor_id_fkey(display_name),campaigns!inner(owner_id)')
+      .eq('campaigns.owner_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(50),
+  ])
 
   const owned = (campaignRows ?? []) as OwnedCampaign[]
-  const campaignIds = owned.map((campaign) => campaign.id)
-
-  // RLS (donations_select_own_or_campaign_owner) is what authorises this read; the
-  // .in() is a narrowing filter, not the security boundary.
-  const { data: donationRows } = campaignIds.length > 0
-    ? await supabase
-        .from('donations')
-        .select('id,amount_minor,currency,status,created_at,is_anonymous,campaign_id,profiles!donations_donor_id_fkey(display_name)')
-        .in('campaign_id', campaignIds)
-        .order('created_at', { ascending: false })
-        .limit(50)
-    : { data: [] }
-
   const donations = (donationRows ?? []) as unknown as DonationRow[]
   const succeeded = donations.filter((donation) => donation.status === 'succeeded')
   const pending = donations.filter((donation) => donation.status === 'pending')

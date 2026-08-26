@@ -71,6 +71,20 @@ function getConfig() {
   return { baseUrl: baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`, apiUser, apiKey }
 }
 
+/**
+ * Direct (in-app) charging vs hosted checkout.
+ *
+ * Verified against the live gateway: this merchant account returns an EMPTY body for
+ * every direct-charge gateway, so direct charging is NOT provisioned. chargeSifalo() is
+ * kept and fully wired behind this flag — flip SIFALO_DIRECT_CHARGE=true the moment
+ * Sifalo enables it and the native flow takes over with no code change.
+ *
+ * Leave it off until Sifalo confirms, otherwise every donation dies in an empty response.
+ */
+export function isDirectChargeEnabled(): boolean {
+  return process.env.SIFALO_DIRECT_CHARGE === 'true'
+}
+
 export function isSifaloConfigured(): boolean {
   return Boolean(process.env.SIFALO_API_USER && process.env.SIFALO_API_KEY)
 }

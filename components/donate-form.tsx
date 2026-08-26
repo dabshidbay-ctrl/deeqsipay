@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { ApiError, AuthRequiredError, authedFetch } from '@/lib/supabase/session'
 import { daysLeft, formatMoney, progressPercent, type Campaign } from '@/lib/campaigns'
+import { SIFALO_WALLETS, type SifaloWallet } from '@/lib/wallets'
 
 type Phase = 'idle' | 'submitting' | 'awaiting_confirmation' | 'succeeded' | 'failed' | 'expired' | 'timeout' | 'unresolved'
 
@@ -21,12 +22,17 @@ function parseAmountMinor(raw: string): number | null {
   return minor
 }
 
-export function DonateForm({ campaign }: { campaign: Campaign }) {
+const PHONE_PATTERN = /^\+?[1-9]\d{7,14}$/
+
+export function DonateForm({ campaign, directCharge = false }: { campaign: Campaign; directCharge?: boolean }) {
   const router = useRouter()
   const [phase, setPhase] = useState<Phase>('idle')
   const [presetMinor, setPresetMinor] = useState<number | null>(null)
   const [customAmount, setCustomAmount] = useState('')
   const [anonymous, setAnonymous] = useState(false)
+  // Only collected in direct mode; hosted checkout takes both on Sifalo's page.
+  const [phone, setPhone] = useState('')
+  const [wallet, setWallet] = useState<SifaloWallet>('zaad')
   const [error, setError] = useState<string | null>(null)
   const [donationId, setDonationId] = useState<string | null>(null)
   const [paidMinor, setPaidMinor] = useState<number | null>(null)
@@ -77,7 +83,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
       const data = await authedFetch<{ donationId?: string; status?: string; unresolved?: boolean; checkoutUrl?: string }>('/api/donations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId: campaign.id, amountMinor, idempotencyKey: idempotencyRef.current, anonymous }),
+        body: JSON.stringify({ campaignId: campaign.id, amountMinor, idempotencyKey: idempotencyRef.current, anonymous, ...(directCharge ? { phone: phone.trim(), wallet } : {}) }),
       })
       if (typeof data.donationId !== 'string' || typeof data.status !== 'string') throw new ApiError(502, 'Unexpected reply from the payment provider')
       setDonationId(data.donationId)
@@ -105,7 +111,8 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
   }
 
   const busy = phase === 'submitting'
-  const canSubmit = phase === 'idle' && amountMinor !== null && !amountInvalid
+  const phoneValid = !directCharge || PHONE_PATTERN.test(phone.trim())
+  const canSubmit = phase === 'idle' && amountMinor !== null && !amountInvalid && phoneValid
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -154,6 +161,34 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
               </label>
               {amountInvalid && <p className="mt-2 text-xs font-semibold text-red-500" role="alert">Enter between $1 and $10,000,000, with at most 2 decimals.</p>}
             </div>
+
+            {directCharge && (
+              <>
+                <fieldset>
+                  <legend className="text-sm font-semibold">Pay from</legend>
+                  <div className="mt-2 grid gap-2">
+                    {SIFALO_WALLETS.map((option) => (
+                      <label key={option.value} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 ${wallet === option.value ? 'border-foreground bg-muted' : 'border-border bg-card'}`}>
+                        <input type="radio" name="wallet" value={option.value} checked={wallet === option.value}
+                          onChange={() => setWallet(option.value)} disabled={busy} className="size-4 accent-[var(--primary)]" />
+                        <span className="text-xs leading-5">
+                          <strong className="block font-semibold">{option.label}</strong>
+                          <span className="text-muted-foreground">{option.hint}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <label className="block text-sm font-semibold">Mobile money number
+                  <input value={phone} onChange={(event) => setPhone(event.target.value)} type="tel" autoComplete="tel"
+                    inputMode="numeric" placeholder="615551234" disabled={busy} className="amount-input" />
+                </label>
+                {phone.trim() !== '' && !PHONE_PATTERN.test(phone.trim()) && (
+                  <p className="text-xs font-semibold text-primary" role="alert">Enter the number without the country code, e.g. 615551234.</p>
+                )}
+              </>
+            )}
 
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3">
               <input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />

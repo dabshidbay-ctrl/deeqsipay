@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient, requireUser } from '@/lib/server/supabase-admin'
-import { createSifaloCheckout, SifaloUnknownError } from '@/lib/server/sifalo'
+import { chargeSifalo, createSifaloCheckout, isDirectChargeEnabled, isSifaloWallet, SifaloUnknownError } from '@/lib/server/sifalo'
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status })
 
@@ -14,11 +14,19 @@ export async function POST(request: Request) {
   try {
     const user = await requireUser(request)
     if (!user) return json({ error: 'Authentication required' }, 401)
-    const body = await request.json() as { campaignId?: string; amountMinor?: number; idempotencyKey?: string; anonymous?: boolean }
+    const body = await request.json() as { campaignId?: string; amountMinor?: number; idempotencyKey?: string; anonymous?: boolean; phone?: string; wallet?: unknown }
     if (!body.campaignId || !body.idempotencyKey || typeof body.amountMinor !== 'number' || !Number.isSafeInteger(body.amountMinor) || body.amountMinor < 100 || body.amountMinor > 1000000000) {
       return json({ error: 'Invalid donation request' }, 400)
     }
     if (!/^[A-Za-z0-9_-]{16,80}$/.test(body.idempotencyKey)) return json({ error: 'Invalid idempotency key' }, 400)
+
+    // Direct charging needs the payer's wallet and number; hosted checkout collects both
+    // on Sifalo's own page, so they must NOT be required (or stored) in that mode.
+    const direct = isDirectChargeEnabled()
+    if (direct) {
+      if (typeof body.phone !== 'string' || !/^\+?[1-9]\d{7,14}$/.test(body.phone)) return json({ error: 'Invalid mobile number' }, 400)
+      if (!isSifaloWallet(body.wallet)) return json({ error: 'Choose which mobile money account to pay from' }, 400)
+    }
 
     const supabase = createAdminClient()
 
@@ -48,10 +56,37 @@ export async function POST(request: Request) {
     }
 
     try {
-      // Hosted checkout: Sifalo collects the wallet number and PIN on their own page, so
-      // we never handle the payer's mobile-money number. Direct API charging returns an
-      // empty body on this merchant account — it is not provisioned for it.
       const origin = new URL(request.url).origin
+
+      // Native in-app flow: the payer approves a USSD prompt on their handset while this
+      // request is open. Only reachable once Sifalo enables direct charging.
+      if (direct && typeof body.phone === 'string' && isSifaloWallet(body.wallet)) {
+        const outcome = await chargeSifalo({
+          amountMinor: body.amountMinor,
+          currency,
+          account: body.phone,
+          wallet: body.wallet,
+          reference: donation.id,
+          originUrl: origin,
+          ip: clientIp(request),
+        })
+        await supabase.from('payment_attempts').insert({
+          donation_id: donation.id,
+          provider_reference: outcome.providerReference,
+          phone_last4: body.phone.slice(-4),
+          status: outcome.status,
+          raw_status: outcome.rawCode,
+        })
+        if (outcome.status === 'succeeded') {
+          await supabase.rpc('credit_donation', { p_donation_id: donation.id, p_provider_reference: outcome.providerReference })
+          return json({ donationId: donation.id, status: 'succeeded', providerReference: outcome.providerReference }, 201)
+        }
+        await supabase.from('donations').update({ status: outcome.status, updated_at: new Date().toISOString() }).eq('id', donation.id).eq('status', 'pending')
+        return json({ donationId: donation.id, status: outcome.status, error: outcome.message }, 200)
+      }
+
+      // Hosted checkout: Sifalo collects the wallet number and PIN on their own page, so
+      // we never handle the payer's mobile-money number.
       const checkout = await createSifaloCheckout({
         amountMinor: body.amountMinor,
         currency,

@@ -73,6 +73,17 @@ export function isSifaloConfigured(): boolean {
   return Boolean(process.env.SIFALO_API_USER && process.env.SIFALO_API_KEY)
 }
 
+/**
+ * Sifalo's own checkout field asks for the plain local wallet number ("Enter your EVC,
+ * ZAAD or SAHAL number"), but our donate form invited "+252 61 555 1234" and we passed it
+ * through verbatim — plus sign and all. Strip to digits and drop a leading 252 country
+ * code so the gateway receives the format it actually expects.
+ */
+export function normaliseAccount(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  return digits.startsWith('252') && digits.length > 9 ? digits.slice(3) : digits
+}
+
 /** Amounts go to Sifalo in MAJOR units with 2 decimals; we hold minor units everywhere else. */
 function toMajorUnits(minor: number): string {
   return (minor / 100).toFixed(2)
@@ -89,7 +100,7 @@ export async function chargeSifalo(input: ChargeInput): Promise<SifaloOutcome> {
       headers: { authorization: `Basic ${authorization}`, 'content-type': 'application/json' },
       body: JSON.stringify({
         amount: toMajorUnits(input.amountMinor),
-        account: input.account,
+        account: normaliseAccount(input.account),
         gateway: input.wallet,
         currency: input.currency,
         channel: 'kindred',

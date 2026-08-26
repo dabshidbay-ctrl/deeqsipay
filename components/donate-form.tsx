@@ -157,7 +157,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
             </div>
             <label className="block text-sm font-semibold">Mobile money number
               <input value={phone} onChange={(event) => setPhone(event.target.value)} type="tel" autoComplete="tel" required
-                placeholder="+252 61 555 1234" disabled={busy} className="amount-input" />
+                placeholder="615551234" disabled={busy} className="amount-input" />
             </label>
             {phone.trim() !== '' && !phoneValid && <p className="text-xs font-semibold text-red-500" role="alert">Add the country code, e.g. +252615551234.</p>}
             <fieldset>

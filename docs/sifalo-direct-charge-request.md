@@ -56,6 +56,12 @@ What we have already ruled out:
   `sahal`, `golis`, `hormuud`, `telesom`, `somtel`, `waafi`, `premier`, `mycash`,
   `salaam`, `somnet`, `direct`, `mobile`, `ussd`. All empty. Only `checkout` responds.
 - **A real, active subscriber number was used** (Hormuud/EVC), not a test number.
+- **Not the endpoint.** `/gateway/` and `/gateway/index.php` are the only paths that
+  respond; `pay.php`, `charge.php`, `api.php`, `purchase.php`, `payment.php`, `ussd.php`,
+  `push.php`, `direct.php`, `payments` and `v1/payments` all return 404 "File not found".
+- **Same credentials, same endpoint, one field different.** With `gateway: "checkout"` the
+  identical request returns a valid `{key, token}`. With `gateway: "zaad"` it returns
+  0 bytes. That is what points us at an account permission rather than our integration.
 
 Our questions:
 

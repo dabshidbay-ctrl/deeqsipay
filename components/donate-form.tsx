@@ -194,7 +194,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
               <input suppressHydrationWarning type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
               <span className="text-xs leading-5"><strong className="block font-semibold">Give anonymously</strong><span className="text-muted-foreground">Your name will show as &ldquo;Anonymous&rdquo; on this campaign. The organiser still sees your donation.</span></span>
             </label>
-            <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> You'll finish on Sifalo Pay's secure page</p>
+            <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> {directCharge ? 'Approve the prompt on your phone to finish' : "You'll finish on Sifalo Pay's secure page"}</p>
             {error !== null && <p className="text-xs font-semibold text-red-500" role="alert">{error}</p>}
             <button suppressHydrationWarning type="submit" className="confirm-button" disabled={!canSubmit}>
               {busy ? 'Contacting Sifalo Pay…' : amountMinor !== null ? `Donate ${formatMoney(amountMinor, campaign.currency)}` : 'Choose an amount'}

@@ -39,6 +39,8 @@ const FAILURE_MESSAGES: Record<string, string> = {
   '606': 'Mobile money is temporarily unavailable. Please try again shortly.',
 }
 
+export type SifaloStatus = 'succeeded' | 'failed' | 'expired'
+
 export type SifaloOutcome =
   | { status: 'succeeded'; providerReference: string; rawCode: string }
   | { status: 'failed' | 'expired'; providerReference: string; rawCode: string; message: string }
@@ -182,5 +184,121 @@ export async function pingSifalo(): Promise<{ ok: boolean; detail: string }> {
     return { ok: true, detail: 'Credentials are recognised by Sifalo.' }
   } catch (caught) {
     return { ok: false, detail: caught instanceof Error ? caught.message : 'Could not reach Sifalo.' }
+  }
+}
+
+// ─── Hosted checkout ─────────────────────────────────────────────────────────────────
+// Verified against the live gateway: this merchant account returns an EMPTY body for
+// every direct-charge gateway (zaad/edahab/pbwallet) but a real {key, token} for
+// gateway='checkout'. Direct API charging is simply not provisioned for this account, so
+// hosted checkout is the working path. Sifalo collects the wallet number and PIN on their
+// own page, which also means we never handle the payer's mobile-money number at all.
+
+const CHECKOUT_BASE = process.env.SIFALO_CHECKOUT_URL ?? 'https://pay.sifalo.com/checkout/'
+
+export type SifaloCheckout = { checkoutUrl: string; key: string; token: string }
+
+export async function createSifaloCheckout(input: {
+  amountMinor: number
+  currency: string
+  reference: string
+  returnUrl: string
+  ip: string
+  billing?: string
+}): Promise<SifaloCheckout> {
+  const { baseUrl, apiUser, apiKey } = getConfig()
+  let response: Response
+  try {
+    response = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        authorization: `Basic ${Buffer.from(`${apiUser}:${apiKey}`).toString('base64')}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: toMajorUnits(input.amountMinor),
+        gateway: 'checkout',
+        channel: 'kindred',
+        currency: input.currency,
+        return_url: input.returnUrl,
+        order_id: input.reference,
+        billing: input.billing ?? '',
+        url: new URL(input.returnUrl).origin,
+        ip: input.ip,
+      }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(30_000),
+    })
+  } catch (caught) {
+    throw new SifaloUnknownError(caught instanceof Error ? caught.message : 'Sifalo request failed')
+  }
+
+  const raw = (await response.text()).trim()
+  if (!response.ok) throw new SifaloUnknownError(`Sifalo returned HTTP ${response.status}`)
+  if (raw === '') throw new SifaloUnknownError('Sifalo returned an empty response for the checkout session')
+
+  let data: { key?: unknown; token?: unknown; code?: unknown; response?: unknown }
+  try { data = JSON.parse(raw) as typeof data } catch {
+    throw new SifaloUnknownError(`Sifalo returned a non-JSON response: ${raw.slice(0, 120)}`)
+  }
+  if (typeof data.key !== 'string' || typeof data.token !== 'string') {
+    throw new SifaloUnknownError(`Sifalo did not return a checkout session: ${raw.slice(0, 160)}`)
+  }
+
+  // key and token arrive already percent-encoded, so they go into the query string as-is.
+  return {
+    key: data.key,
+    token: data.token,
+    checkoutUrl: `${CHECKOUT_BASE}?key=${data.key}&token=${data.token}`,
+  }
+}
+
+export type SifaloVerification = {
+  status: SifaloStatus
+  rawCode: string
+  amountMinor: number | null
+  account: string | null
+}
+
+/**
+ * The authoritative result of a hosted-checkout payment, looked up by the `sid` Sifalo
+ * appends to our return_url. This is what makes the redirect flow safe: the browser can
+ * claim anything, so we ask Sifalo directly and never trust the query string.
+ */
+export async function verifySifaloPayment(sid: string): Promise<SifaloVerification> {
+  const { baseUrl } = getConfig()
+  const endpoint = `${baseUrl}verify.php`
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sid }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20_000),
+    })
+  } catch (caught) {
+    throw new SifaloUnknownError(caught instanceof Error ? caught.message : 'Sifalo verify failed')
+  }
+
+  const raw = (await response.text()).trim()
+  if (raw === '') throw new SifaloUnknownError('Sifalo verify returned an empty response')
+  let data: { code?: unknown; status?: unknown; amount?: unknown; account?: unknown }
+  try { data = JSON.parse(raw) as typeof data } catch {
+    throw new SifaloUnknownError(`Sifalo verify returned non-JSON: ${raw.slice(0, 120)}`)
+  }
+
+  const code = data.code === undefined || data.code === null ? '' : String(data.code)
+  const amountMinor = typeof data.amount === 'number' && Number.isFinite(data.amount)
+    ? Math.round(data.amount * 100)
+    : typeof data.amount === 'string' && /^\d+(\.\d{1,2})?$/.test(data.amount)
+      ? Math.round(Number(data.amount) * 100)
+      : null
+
+  return {
+    status: code === SUCCESS_CODE ? 'succeeded' : code === '605' ? 'expired' : 'failed',
+    rawCode: code,
+    amountMinor,
+    account: typeof data.account === 'string' ? data.account : null,
   }
 }

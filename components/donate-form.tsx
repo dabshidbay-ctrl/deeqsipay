@@ -5,14 +5,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { ApiError, AuthRequiredError, authedFetch } from '@/lib/supabase/session'
-import { SIFALO_WALLETS, type SifaloWallet } from '@/lib/wallets'
 import { daysLeft, formatMoney, progressPercent, type Campaign } from '@/lib/campaigns'
 
 type Phase = 'idle' | 'submitting' | 'awaiting_confirmation' | 'succeeded' | 'failed' | 'expired' | 'timeout' | 'unresolved'
 
 const PRESET_MINORS = [2500, 5000, 10000]
 const AMOUNT_PATTERN = /^\d{1,8}(\.\d{1,2})?$/
-const PHONE_PATTERN = /^\+?[1-9]\d{7,14}$/
 const POLL_INTERVAL_MS = 3000
 const POLL_LIMIT_MS = 120_000
 
@@ -28,9 +26,6 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [presetMinor, setPresetMinor] = useState<number | null>(null)
   const [customAmount, setCustomAmount] = useState('')
-  const [phone, setPhone] = useState('')
-  // Sifalo routes by wallet and cannot infer it from the number, so it is required.
-  const [wallet, setWallet] = useState<SifaloWallet>('zaad')
   const [anonymous, setAnonymous] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [donationId, setDonationId] = useState<string | null>(null)
@@ -42,7 +37,6 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
   const customMinor = trimmedCustom === '' ? null : parseAmountMinor(trimmedCustom)
   const amountMinor = customMinor ?? presetMinor
   const amountInvalid = trimmedCustom !== '' && customMinor === null
-  const phoneValid = PHONE_PATTERN.test(phone.trim())
   const daysRemaining = daysLeft(campaign.endsAt)
 
   useEffect(() => {
@@ -75,18 +69,23 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
-    if (phase !== 'idle' || amountMinor === null || !phoneValid) return
+    if (phase !== 'idle' || amountMinor === null) return
     setError(null)
     setPaidMinor(amountMinor)
     setPhase('submitting')
     try {
-      const data = await authedFetch<{ donationId?: string; status?: string; unresolved?: boolean }>('/api/donations', {
+      const data = await authedFetch<{ donationId?: string; status?: string; unresolved?: boolean; checkoutUrl?: string }>('/api/donations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId: campaign.id, amountMinor, phone: phone.trim(), idempotencyKey: idempotencyRef.current, anonymous, wallet }),
+        body: JSON.stringify({ campaignId: campaign.id, amountMinor, idempotencyKey: idempotencyRef.current, anonymous }),
       })
       if (typeof data.donationId !== 'string' || typeof data.status !== 'string') throw new ApiError(502, 'Unexpected reply from the payment provider')
       setDonationId(data.donationId)
+      // Hosted checkout: Sifalo takes the wallet number and PIN on their own page.
+      if (typeof data.checkoutUrl === 'string' && data.checkoutUrl !== '') {
+        window.location.assign(data.checkoutUrl)
+        return
+      }
       // 'unresolved' means the row exists but Sifalo never answered. That is NOT a
       // decline, so it must not be shown as one.
       if (data.unresolved === true) { setError(null); setPhase('unresolved') }
@@ -106,7 +105,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
   }
 
   const busy = phase === 'submitting'
-  const canSubmit = phase === 'idle' && amountMinor !== null && !amountInvalid && phoneValid
+  const canSubmit = phase === 'idle' && amountMinor !== null && !amountInvalid
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -155,32 +154,12 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
               </label>
               {amountInvalid && <p className="mt-2 text-xs font-semibold text-red-500" role="alert">Enter between $1 and $10,000,000, with at most 2 decimals.</p>}
             </div>
-            <label className="block text-sm font-semibold">Mobile money number
-              <input value={phone} onChange={(event) => setPhone(event.target.value)} type="tel" autoComplete="tel" required
-                placeholder="615551234" disabled={busy} className="amount-input" />
-            </label>
-            {phone.trim() !== '' && !phoneValid && <p className="text-xs font-semibold text-red-500" role="alert">Add the country code, e.g. +252615551234.</p>}
-            <fieldset>
-              <legend className="text-sm font-semibold">Pay from</legend>
-              <div className="mt-2 grid gap-2">
-                {SIFALO_WALLETS.map((option) => (
-                  <label key={option.value} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${wallet === option.value ? 'border-primary bg-accent-softer' : 'border-border bg-card'}`}>
-                    <input type="radio" name="wallet" value={option.value} checked={wallet === option.value}
-                      onChange={() => setWallet(option.value)} disabled={busy} className="size-4 accent-[var(--primary)]" />
-                    <span className="text-xs leading-5">
-                      <strong className="block font-semibold">{option.label}</strong>
-                      <span className="text-muted-foreground">{option.hint}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
 
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3">
               <input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
               <span className="text-xs leading-5"><strong className="block font-semibold">Give anonymously</strong><span className="text-muted-foreground">Your name will show as &ldquo;Anonymous&rdquo; on this campaign. The organiser still sees your donation.</span></span>
             </label>
-            <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> Mobile money payments secured by Sifalo Pay</p>
+            <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> You'll finish on Sifalo Pay's secure page</p>
             {error !== null && <p className="text-xs font-semibold text-red-500" role="alert">{error}</p>}
             <button type="submit" className="confirm-button" disabled={!canSubmit}>
               {busy ? 'Contacting Sifalo Pay…' : amountMinor !== null ? `Donate ${formatMoney(amountMinor, campaign.currency)}` : 'Choose an amount'}
@@ -190,8 +169,8 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
         {phase === 'awaiting_confirmation' && (
           <section className="rounded-2xl border border-border bg-card p-6 text-center">
             <p className="eyebrow">Awaiting confirmation</p>
-            <h2 className="mt-3 font-serif text-2xl">Approve the prompt on your phone.</h2>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">We sent a payment request to •••• {phone.slice(-4)}. Enter your PIN there and this page updates on its own.</p>
+            <h2 className="mt-3 font-serif text-2xl">Taking you to Sifalo Pay…</h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">Enter your mobile money number and PIN on Sifalo&rsquo;s secure page. You&rsquo;ll come straight back here afterwards.</p>
             <p className="mt-5 flex items-center justify-center gap-2 text-xs font-semibold text-muted-foreground"><span className="size-2 animate-pulse rounded-full bg-primary" /> Checking every few seconds</p>
           </section>
         )}

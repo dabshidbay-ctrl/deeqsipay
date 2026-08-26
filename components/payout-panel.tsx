@@ -242,7 +242,7 @@ export function PayoutPanel({ campaignId, campaignTitle, currency }: { campaignI
           <p className="eyebrow">Balance</p>
           <h2 className="mt-1 font-serif text-lg leading-tight">{campaignTitle}</h2>
         </div>
-        <button type="button" onClick={refresh} disabled={loading} aria-label="Refresh balance" className="icon-button shrink-0">
+        <button suppressHydrationWarning type="button" onClick={refresh} disabled={loading} aria-label="Refresh balance" className="icon-button shrink-0">
           <RefreshCw size={15} className={loading ? 'animate-spin' : undefined} />
         </button>
       </div>
@@ -261,7 +261,7 @@ export function PayoutPanel({ campaignId, campaignTitle, currency }: { campaignI
         <div className="mt-4 rounded-2xl border border-dashed border-border p-5 text-center">
           <AlertCircle className="mx-auto text-red-500" size={20} />
           <p className="mt-2 text-sm leading-6 text-muted-foreground" role="alert">{loadError}</p>
-          <button type="button" className="confirm-button mt-4" onClick={refresh}>Try again</button>
+          <button suppressHydrationWarning type="button" className="confirm-button mt-4" onClick={refresh}>Try again</button>
         </div>
       ) : balance !== null ? (
         <>
@@ -303,12 +303,12 @@ export function PayoutPanel({ campaignId, campaignTitle, currency }: { campaignI
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="mt-3">
-                <button type="button" disabled={submitting} onClick={() => { setAmount(minorToInputValue(balance.availableMinor)); setServerError(null) }}
+                <button suppressHydrationWarning type="button" disabled={submitting} onClick={() => { setAmount(minorToInputValue(balance.availableMinor)); setServerError(null) }}
                   className={parsedMinor === balance.availableMinor ? 'amount-option amount-active w-full' : 'amount-option w-full'}>
                   Request full balance · {formatMoney(balance.availableMinor, displayCurrency)}
                 </button>
                 <label className="mt-4 block text-sm font-semibold">Or choose an amount
-                  <input value={amount} onChange={(event) => { setAmount(event.target.value); setServerError(null) }} inputMode="decimal"
+                  <input suppressHydrationWarning value={amount} onChange={(event) => { setAmount(event.target.value); setServerError(null) }} inputMode="decimal"
                     autoComplete="off" placeholder="0.00" disabled={submitting} className="amount-input" />
                 </label>
                 {formatInvalid && (
@@ -327,7 +327,7 @@ export function PayoutPanel({ campaignId, campaignTitle, currency }: { campaignI
                   </p>
                 )}
                 <p className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> An admin checks every payout before any money moves</p>
-                <button type="submit" className="confirm-button" disabled={!canSubmit}>
+                <button suppressHydrationWarning type="submit" className="confirm-button" disabled={!canSubmit}>
                   {submitting ? 'Sending your request…' : parsedMinor !== null && !exceedsAvailable ? `Request ${formatMoney(parsedMinor, displayCurrency)}` : 'Choose an amount'}
                 </button>
               </form>
@@ -363,7 +363,7 @@ export function PayoutPanel({ campaignId, campaignTitle, currency }: { campaignI
                         <p className="mt-2 text-xs text-muted-foreground">Payment reference <span className="font-semibold text-foreground">{payout.providerReference}</span></p>
                       )}
                       {payout.status === 'requested' && (
-                        <button type="button" onClick={() => { void handleCancel(payout.id) }} disabled={cancellingId !== null}
+                        <button suppressHydrationWarning type="button" onClick={() => { void handleCancel(payout.id) }} disabled={cancellingId !== null}
                           className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground disabled:opacity-60">
                           <Ban size={13} />{cancellingId === payout.id ? 'Cancelling…' : 'Cancel request'}
                         </button>

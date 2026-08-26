@@ -72,7 +72,7 @@ function LoginForm() {
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           We sent a link to <strong className="text-foreground">{email.trim()}</strong>. Open it and you will be signed in.
         </p>
-        <button onClick={() => { setCheckEmail(false); setMode('signin') }} className="confirm-button mt-7">Back to sign in</button>
+        <button suppressHydrationWarning onClick={() => { setCheckEmail(false); setMode('signin') }} className="confirm-button mt-7">Back to sign in</button>
       </section>
     )
   }
@@ -88,7 +88,7 @@ function LoginForm() {
       </p>
       {noticeText !== null && <p role="status" className="mt-5 rounded-xl border border-border bg-card p-3 text-xs leading-5 text-foreground">{noticeText}</p>}
       <form onSubmit={handleSubmit} className="mt-7 space-y-3" noValidate>
-        <input
+        <input suppressHydrationWarning
           className="amount-input"
           type="email"
           inputMode="email"
@@ -99,7 +99,7 @@ function LoginForm() {
           onChange={(event) => setEmail(event.target.value)}
           required
         />
-        <input
+        <input suppressHydrationWarning
           className="amount-input"
           type="password"
           autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
@@ -115,13 +115,13 @@ function LoginForm() {
           </p>
         )}
         {error !== null && <p role="alert" className="rounded-xl border border-border bg-card p-3 text-xs leading-5 text-red-500">{error}</p>}
-        <button type="submit" className="confirm-button" disabled={submitting}>
+        <button suppressHydrationWarning type="submit" className="confirm-button" disabled={submitting}>
           {submitting ? 'one moment…' : mode === 'signin' ? 'Sign in' : 'Create account'}
         </button>
       </form>
       <p className="mt-6 text-center text-sm text-muted-foreground">
         {mode === 'signin' ? 'New to kindred?' : 'Already have an account?'}{' '}
-        <button
+        <button suppressHydrationWarning
           type="button"
           className="font-semibold text-foreground underline underline-offset-4"
           onClick={() => {

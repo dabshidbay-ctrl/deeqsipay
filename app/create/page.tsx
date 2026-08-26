@@ -299,25 +299,25 @@ export default function CreatePage() {
         </header>
         <form onSubmit={(event) => { void handleSubmit(event) }} className="space-y-5">
           <label className="block text-sm font-semibold">What are you raising money for?
-            <input value={title} onChange={(event) => setTitle(event.target.value)} required minLength={8} maxLength={120} disabled={submitting}
+            <input suppressHydrationWarning value={title} onChange={(event) => setTitle(event.target.value)} required minLength={8} maxLength={120} disabled={submitting}
               className="amount-input" placeholder="Give your fundraiser a clear title" />
           </label>
           {titleInvalid && <p className="text-xs font-semibold text-red-500" role="alert">Titles run from 8 to 120 characters.</p>}
 
           <label className="block text-sm font-semibold">Tell your story
-            <textarea value={description} onChange={(event) => setDescription(event.target.value)} required minLength={20} maxLength={5000} disabled={submitting}
+            <textarea suppressHydrationWarning value={description} onChange={(event) => setDescription(event.target.value)} required minLength={20} maxLength={5000} disabled={submitting}
               className="amount-input min-h-32 resize-none" placeholder="Help people understand why this matters..." />
           </label>
           {descriptionInvalid && <p className="text-xs font-semibold text-red-500" role="alert">Your story needs 20 to 5000 characters — you have {cleanDescription.length}.</p>}
 
           <label className="block text-sm font-semibold">Category
-            <select value={category} onChange={(event) => setCategory(event.target.value)} disabled={submitting} className="amount-input">
+            <select suppressHydrationWarning value={category} onChange={(event) => setCategory(event.target.value)} disabled={submitting} className="amount-input">
               {CATEGORIES.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           </label>
 
           <label className="block text-sm font-semibold">Fundraising goal
-            <input value={goal} onChange={(event) => setGoal(event.target.value)} inputMode="decimal" autoComplete="off" disabled={submitting}
+            <input suppressHydrationWarning value={goal} onChange={(event) => setGoal(event.target.value)} inputMode="decimal" autoComplete="off" disabled={submitting}
               className="amount-input" placeholder="$ 0.00" />
           </label>
           {goalInvalid && <p className="text-xs font-semibold text-red-500" role="alert">Set a goal of at least $1 — whole dollars or up to 2 decimals.</p>}
@@ -325,7 +325,7 @@ export default function CreatePage() {
           <div>
             <p className="text-sm font-semibold">Campaign photo</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">One honest photo does more than a page of words. JPG, PNG or WebP, up to 5 MB. This one is public — donors will see it.</p>
-            <input ref={photoInputRef} type="file" accept={PHOTO_ACCEPT} className="hidden" tabIndex={-1}
+            <input suppressHydrationWarning ref={photoInputRef} type="file" accept={PHOTO_ACCEPT} className="hidden" tabIndex={-1}
               onChange={(event) => { void handlePhotoChange(event) }} />
             {photo.status === 'ready' ? (
               <div className="mt-3 flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
@@ -334,11 +334,11 @@ export default function CreatePage() {
                   <p className="truncate text-xs font-semibold">{photo.fileName}</p>
                   <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-primary"><Check size={12} /> Uploaded</p>
                 </div>
-                <button type="button" onClick={openPhotoPicker} disabled={submitting}
+                <button suppressHydrationWarning type="button" onClick={openPhotoPicker} disabled={submitting}
                   className="shrink-0 rounded-full border border-border px-3 py-2 text-[11px] font-bold text-foreground">Replace</button>
               </div>
             ) : (
-              <button type="button" onClick={openPhotoPicker} disabled={submitting || photo.status === 'uploading'}
+              <button suppressHydrationWarning type="button" onClick={openPhotoPicker} disabled={submitting || photo.status === 'uploading'}
                 className="amount-option mt-3 flex w-full items-center justify-center gap-2 text-xs">
                 {photo.status === 'uploading' ? (
                   <><Loader2 size={15} className="animate-spin" /> <span className="max-w-[70%] truncate">Uploading {photo.fileName}…</span></>
@@ -359,7 +359,7 @@ export default function CreatePage() {
               It is stored privately, apart from the public site. It never appears on your campaign, it is never shown to donors, and no one but our review team can open it.
             </p>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">Passport or NIRA card — JPG, PNG, WebP or PDF, up to 10 MB.</p>
-            <input ref={documentInputRef} type="file" accept={DOCUMENT_ACCEPT} className="hidden" tabIndex={-1}
+            <input suppressHydrationWarning ref={documentInputRef} type="file" accept={DOCUMENT_ACCEPT} className="hidden" tabIndex={-1}
               onChange={(event) => { void handleDocumentChange(event) }} />
             {identity.status === 'ready' ? (
               <div className="mt-3 flex items-center gap-3 rounded-xl border border-border bg-background p-3">
@@ -369,11 +369,11 @@ export default function CreatePage() {
                   <p className="truncate text-xs font-semibold">{identity.fileName}</p>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">Uploaded and stored privately</p>
                 </div>
-                <button type="button" onClick={openDocumentPicker} disabled={submitting}
+                <button suppressHydrationWarning type="button" onClick={openDocumentPicker} disabled={submitting}
                   className="shrink-0 rounded-full border border-border px-3 py-2 text-[11px] font-bold text-foreground">Replace</button>
               </div>
             ) : (
-              <button type="button" onClick={openDocumentPicker} disabled={submitting || identity.status === 'uploading'}
+              <button suppressHydrationWarning type="button" onClick={openDocumentPicker} disabled={submitting || identity.status === 'uploading'}
                 className="amount-option mt-3 flex w-full items-center justify-center gap-2 text-xs">
                 {identity.status === 'uploading' ? (
                   <><Loader2 size={15} className="animate-spin" /> <span className="max-w-[70%] truncate">Uploading {identity.fileName}…</span></>
@@ -394,12 +394,12 @@ export default function CreatePage() {
                 return (
                   <div key={index}>
                     <div className="flex items-center gap-2">
-                      <input value={phone} onChange={(event) => updatePhone(index, event.target.value)} type="tel" inputMode="tel" autoComplete="off"
+                      <input suppressHydrationWarning value={phone} onChange={(event) => updatePhone(index, event.target.value)} type="tel" inputMode="tel" autoComplete="off"
                         aria-label={`Contact number ${index + 1}`} disabled={submitting}
                         placeholder={index === 0 ? '+252 61 555 1234' : 'A different number'}
                         className="amount-input flex-1" />
                       {index >= MIN_PHONES && (
-                        <button type="button" onClick={() => removePhone(index)} disabled={submitting}
+                        <button suppressHydrationWarning type="button" onClick={() => removePhone(index)} disabled={submitting}
                           aria-label={`Remove contact number ${index + 1}`} className="icon-button mt-[7px] shrink-0"><X size={15} /></button>
                       )}
                     </div>
@@ -409,14 +409,14 @@ export default function CreatePage() {
               })}
             </div>
             {phones.length < MAX_PHONES && (
-              <button type="button" onClick={addPhone} disabled={submitting}
+              <button suppressHydrationWarning type="button" onClick={addPhone} disabled={submitting}
                 className="amount-option mt-3 flex w-full items-center justify-center gap-2 text-xs"><Plus size={14} /> Add another number</button>
             )}
           </fieldset>
 
           {error !== null && <p className="text-xs font-semibold text-red-500" role="alert">{error}</p>}
           <div>
-            <button type="submit" className="confirm-button disabled:opacity-55" disabled={!canSubmit}>{submitting ? 'Sending…' : 'Submit for review'}</button>
+            <button suppressHydrationWarning type="submit" className="confirm-button disabled:opacity-55" disabled={!canSubmit}>{submitting ? 'Sending…' : 'Submit for review'}</button>
             {!canSubmit && !submitting && (
               <p className="mt-2 text-center text-[11px] leading-5 text-muted-foreground">
                 {uploading ? 'Hold on — your file is still uploading.' : `Still to add: ${missing}.`}

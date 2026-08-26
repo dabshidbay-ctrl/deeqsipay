@@ -147,7 +147,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
                 {PRESET_MINORS.map((minor) => {
                   const active = trimmedCustom === '' && presetMinor === minor
                   return (
-                    <button key={minor} type="button" aria-pressed={active} disabled={busy}
+                    <button suppressHydrationWarning key={minor} type="button" aria-pressed={active} disabled={busy}
                       className={active ? 'amount-option amount-active' : 'amount-option'}
                       onClick={() => { setPresetMinor(minor); setCustomAmount('') }}>
                       {formatMoney(minor, campaign.currency)}
@@ -156,7 +156,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
                 })}
               </div>
               <label className="mt-4 block text-sm font-semibold">Or enter your own
-                <input value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} inputMode="decimal" autoComplete="off"
+                <input suppressHydrationWarning value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} inputMode="decimal" autoComplete="off"
                   placeholder="$ 0.00" disabled={busy} className="amount-input" />
               </label>
               {amountInvalid && <p className="mt-2 text-xs font-semibold text-red-500" role="alert">Enter between $1 and $10,000,000, with at most 2 decimals.</p>}
@@ -169,7 +169,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
                   <div className="mt-2 grid gap-2">
                     {SIFALO_WALLETS.map((option) => (
                       <label key={option.value} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 ${wallet === option.value ? 'border-foreground bg-muted' : 'border-border bg-card'}`}>
-                        <input type="radio" name="wallet" value={option.value} checked={wallet === option.value}
+                        <input suppressHydrationWarning type="radio" name="wallet" value={option.value} checked={wallet === option.value}
                           onChange={() => setWallet(option.value)} disabled={busy} className="size-4 accent-[var(--primary)]" />
                         <span className="text-xs leading-5">
                           <strong className="block font-semibold">{option.label}</strong>
@@ -181,7 +181,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
                 </fieldset>
 
                 <label className="block text-sm font-semibold">Mobile money number
-                  <input value={phone} onChange={(event) => setPhone(event.target.value)} type="tel" autoComplete="tel"
+                  <input suppressHydrationWarning value={phone} onChange={(event) => setPhone(event.target.value)} type="tel" autoComplete="tel"
                     inputMode="numeric" placeholder="615551234" disabled={busy} className="amount-input" />
                 </label>
                 {phone.trim() !== '' && !PHONE_PATTERN.test(phone.trim()) && (
@@ -191,12 +191,12 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
             )}
 
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3">
-              <input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
+              <input suppressHydrationWarning type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
               <span className="text-xs leading-5"><strong className="block font-semibold">Give anonymously</strong><span className="text-muted-foreground">Your name will show as &ldquo;Anonymous&rdquo; on this campaign. The organiser still sees your donation.</span></span>
             </label>
             <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> You'll finish on Sifalo Pay's secure page</p>
             {error !== null && <p className="text-xs font-semibold text-red-500" role="alert">{error}</p>}
-            <button type="submit" className="confirm-button" disabled={!canSubmit}>
+            <button suppressHydrationWarning type="submit" className="confirm-button" disabled={!canSubmit}>
               {busy ? 'Contacting Sifalo Pay…' : amountMinor !== null ? `Donate ${formatMoney(amountMinor, campaign.currency)}` : 'Choose an amount'}
             </button>
           </form>
@@ -222,7 +222,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
             <p className="eyebrow">Payment failed</p>
             <h2 className="mt-3 font-serif text-2xl">That attempt didn&rsquo;t go through.</h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground" role="alert">{error ?? 'The payment provider could not process this right now. Nothing was charged.'}</p>
-            <button type="button" className="confirm-button mt-6" onClick={resetAttempt}>Try again</button>
+            <button suppressHydrationWarning type="button" className="confirm-button mt-6" onClick={resetAttempt}>Try again</button>
           </section>
         )}
         {phase === 'expired' && (
@@ -230,7 +230,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
             <p className="eyebrow">Request expired</p>
             <h2 className="mt-3 font-serif text-2xl">The approval window closed.</h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">No charge was made. Start again whenever you&rsquo;re ready.</p>
-            <button type="button" className="confirm-button mt-6" onClick={resetAttempt}>Start over</button>
+            <button suppressHydrationWarning type="button" className="confirm-button mt-6" onClick={resetAttempt}>Start over</button>
           </section>
         )}
         {phase === 'unresolved' && (
@@ -241,7 +241,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
               Your donation is recorded as pending. <strong className="text-foreground">Do not pay again</strong> — if money left your account it will be credited once we reconcile. If your phone never asked for a PIN, nothing was charged.
             </p>
             <Link href="/profile" className="confirm-button mt-6 inline-block">Go to profile</Link>
-            <button type="button" onClick={resetAttempt} className="mt-3 block w-full py-1 text-center text-xs font-bold text-primary">Try a different number</button>
+            <button suppressHydrationWarning type="button" onClick={resetAttempt} className="mt-3 block w-full py-1 text-center text-xs font-bold text-primary">Try a different number</button>
           </section>
         )}
 

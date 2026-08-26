@@ -84,7 +84,7 @@ export default function ResetPasswordPage() {
 
     <form onSubmit={handleSubmit} className="mt-7 space-y-3" noValidate>
       <div className="relative">
-        <input
+        <input suppressHydrationWarning
           className="amount-input pr-11"
           type={reveal ? 'text' : 'password'}
           autoComplete="new-password"
@@ -94,7 +94,7 @@ export default function ResetPasswordPage() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        <button type="button" onClick={() => setReveal((current) => !current)}
+        <button suppressHydrationWarning type="button" onClick={() => setReveal((current) => !current)}
           aria-label={reveal ? 'Hide password' : 'Show password'}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
           {reveal ? <EyeOff size={17} /> : <Eye size={17} />}
@@ -102,7 +102,7 @@ export default function ResetPasswordPage() {
       </div>
       {problem !== null && <p className="text-xs font-semibold text-primary">{problem}</p>}
 
-      <input
+      <input suppressHydrationWarning
         className="amount-input"
         type={reveal ? 'text' : 'password'}
         autoComplete="new-password"
@@ -116,7 +116,7 @@ export default function ResetPasswordPage() {
 
       {error !== null && <p role="alert" className="rounded-xl border border-border bg-card p-3 text-xs leading-5 text-red-500">{error}</p>}
 
-      <button type="submit" disabled={!canSubmit} className="confirm-button disabled:opacity-50">
+      <button suppressHydrationWarning type="submit" disabled={!canSubmit} className="confirm-button disabled:opacity-50">
         {submitting ? 'Saving…' : 'Save new password'}
       </button>
     </form>

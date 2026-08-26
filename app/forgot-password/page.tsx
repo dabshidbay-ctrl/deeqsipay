@@ -53,7 +53,7 @@ export default function ForgotPasswordPage() {
       </p>
       <div className="mt-8 space-y-3">
         <Link href="/login" className="confirm-button">Back to sign in</Link>
-        <button onClick={() => { setSent(false); setError(null) }} className="block w-full py-1 text-center text-xs font-bold text-primary">Use a different address</button>
+        <button suppressHydrationWarning onClick={() => { setSent(false); setError(null) }} className="block w-full py-1 text-center text-xs font-bold text-primary">Use a different address</button>
       </div>
     </div></main>
   }
@@ -65,7 +65,7 @@ export default function ForgotPasswordPage() {
     <p className="mt-3 text-sm leading-6 text-muted-foreground">Enter the email you signed up with and we’ll send a link to set a new password.</p>
 
     <form onSubmit={handleSubmit} className="mt-7 space-y-3" noValidate>
-      <input
+      <input suppressHydrationWarning
         className="amount-input"
         type="email"
         inputMode="email"
@@ -78,7 +78,7 @@ export default function ForgotPasswordPage() {
       />
       {email !== '' && !emailValid && <p className="text-xs font-semibold text-primary">That does not look like an email address.</p>}
       {error !== null && <p role="alert" className="rounded-xl border border-border bg-card p-3 text-xs leading-5 text-red-500">{error}</p>}
-      <button type="submit" disabled={submitting || !emailValid} className="confirm-button disabled:opacity-50">
+      <button suppressHydrationWarning type="submit" disabled={submitting || !emailValid} className="confirm-button disabled:opacity-50">
         {submitting ? 'Sending…' : 'Send reset link'}
       </button>
     </form>

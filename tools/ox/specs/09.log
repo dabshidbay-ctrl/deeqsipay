@@ -2,3 +2,13 @@
 [ox] 429 upstream, retry 1/14 in 3.513s
 [ox] 429 upstream, retry 2/14 in 7.666s
 [ox] 429 upstream, retry 3/14 in 14.943s
+[ox] 610.2s | tokens 33287 | wrote 1 files
+  supabase/migrations/0005_payout_accounts_notifications.sql
+
+NOTES:- Assumed `donations.donor_id` is the donor FK to profiles (0001 not provided); the anonymity/self-donation logic depends on that column name.
+- Assumed notification links use the route shape `/campaigns/{id}`.
+- Spec said "four destination_* columns" but only three are destination_-prefixed; guarded all four destination facts (payout_account_id + wallet/number/name) under the same populate-once rule.
+- Old-signature drops intentionally have NO preceding revoke: revoking a nonexistent function errors on re-run, while DROP removes the ACL with the function, keeping idempotency.
+- `payout_events.on delete cascade` is effectively pinned by the immutability trigger (deleting a payout raises); implemented exactly as specced.
+- Regex written as `^[A-Za-z0-9+-]{6,34}$` (trailing hyphen) — identical predicate to the spec's escaped form, but unambiguous in POSIX bracket expressions.
+=== END NOTES ===

@@ -29,6 +29,8 @@ import type { SifaloWallet } from '@/lib/wallets'
 const REQUEST_TIMEOUT_MS = 90_000
 
 const SUCCESS_CODE = '601'
+// Codes that mean OUR request was wrong, not that the donor's payment failed.
+const SYSTEM_CODES = new Set(['0', '404', '600', ''])
 const FAILURE_MESSAGES: Record<string, string> = {
   '602': 'The payment did not go through. Check the number and try again.',
   '603': 'There was not enough balance on that account.',
@@ -107,11 +109,17 @@ export async function chargeSifalo(input: ChargeInput): Promise<SifaloOutcome> {
 
   if (!response.ok) throw new SifaloUnknownError(`Sifalo returned HTTP ${response.status}`)
 
+  // Sifalo answers 200 with an EMPTY body when it cannot route the request at all
+  // (observed against the live gateway). That is not a declined payment — it is no
+  // answer, so the outcome is unknown and the donation must stay pending.
+  const raw = (await response.text()).trim()
+  if (raw === '') throw new SifaloUnknownError('Sifalo returned an empty response')
+
   let data: { code?: unknown; response?: unknown; sid?: unknown; txn_id?: unknown }
   try {
-    data = await response.json() as typeof data
+    data = JSON.parse(raw) as typeof data
   } catch {
-    throw new SifaloUnknownError('Sifalo returned a non-JSON response')
+    throw new SifaloUnknownError(`Sifalo returned a non-JSON response: ${raw.slice(0, 120)}`)
   }
 
   const code = data.code === undefined || data.code === null ? '' : String(data.code)
@@ -123,7 +131,45 @@ export async function chargeSifalo(input: ChargeInput): Promise<SifaloOutcome> {
 
   if (code === SUCCESS_CODE) return { status: 'succeeded', providerReference, rawCode: code }
 
-  const message = FAILURE_MESSAGES[code]
-    ?? (typeof data.response === 'string' && data.response !== '' ? data.response : 'The payment could not be completed.')
-  return { status: code === '605' ? 'expired' : 'failed', providerReference, rawCode: code, message }
+  // OUR fault, not the donor's. Verified against the live gateway: bad credentials return
+  // code 0, and a malformed request returns 404 "Required parameters missing". Neither
+  // means the payment was declined — nothing was ever attempted. Recording these as
+  // 'failed' would tell a donor their card was refused because we misconfigured a key,
+  // and would permanently mark a donation failed that never ran. Treat as unknown.
+  if (SYSTEM_CODES.has(code) || !FAILURE_MESSAGES[code]) {
+    throw new SifaloUnknownError(
+      `Sifalo rejected the request (code ${code || 'none'}): ${typeof data.response === 'string' && data.response !== '' ? data.response : 'no detail'}`,
+    )
+  }
+
+  return { status: code === '605' ? 'expired' : 'failed', providerReference, rawCode: code, message: FAILURE_MESSAGES[code] }
+}
+
+/**
+ * Confirms the credentials are accepted WITHOUT initiating a charge.
+ * Relies on a behaviour verified against the live gateway: valid credentials produce a
+ * different response than invalid ones, so we can distinguish "keys work" from "keys
+ * wrong" without moving any money.
+ */
+export async function pingSifalo(): Promise<{ ok: boolean; detail: string }> {
+  const { baseUrl, apiUser, apiKey } = getConfig()
+  const send = async (auth: string) => {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { authorization: `Basic ${auth}`, 'content-type': 'application/json' },
+      // Deliberately unroutable account: this can never correspond to a real subscriber.
+      body: JSON.stringify({ amount: '0.01', account: '000000000', gateway: 'zaad', currency: 'USD', channel: 'kindred', txn_order_id: `ping-${Date.now()}`, url: 'https://kindred.local', ip: '127.0.0.1', billing: '' }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20_000),
+    })
+    return (await res.text()).trim()
+  }
+  try {
+    const good = await send(Buffer.from(`${apiUser}:${apiKey}`).toString('base64'))
+    const bad = await send(Buffer.from('invalid:invalid').toString('base64'))
+    if (good === bad) return { ok: false, detail: 'Sifalo treats our credentials the same as invalid ones — check SIFALO_API_USER / SIFALO_API_KEY.' }
+    return { ok: true, detail: 'Credentials are recognised by Sifalo.' }
+  } catch (caught) {
+    return { ok: false, detail: caught instanceof Error ? caught.message : 'Could not reach Sifalo.' }
+  }
 }

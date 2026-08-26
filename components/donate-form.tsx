@@ -8,7 +8,7 @@ import { ApiError, AuthRequiredError, authedFetch } from '@/lib/supabase/session
 import { SIFALO_WALLETS, type SifaloWallet } from '@/lib/wallets'
 import { daysLeft, formatMoney, progressPercent, type Campaign } from '@/lib/campaigns'
 
-type Phase = 'idle' | 'submitting' | 'awaiting_confirmation' | 'succeeded' | 'failed' | 'expired' | 'timeout'
+type Phase = 'idle' | 'submitting' | 'awaiting_confirmation' | 'succeeded' | 'failed' | 'expired' | 'timeout' | 'unresolved'
 
 const PRESET_MINORS = [2500, 5000, 10000]
 const AMOUNT_PATTERN = /^\d{1,8}(\.\d{1,2})?$/
@@ -80,14 +80,17 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
     setPaidMinor(amountMinor)
     setPhase('submitting')
     try {
-      const data = await authedFetch<{ donationId?: string; status?: string }>('/api/donations', {
+      const data = await authedFetch<{ donationId?: string; status?: string; unresolved?: boolean }>('/api/donations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ campaignId: campaign.id, amountMinor, phone: phone.trim(), idempotencyKey: idempotencyRef.current, anonymous, wallet }),
       })
       if (typeof data.donationId !== 'string' || typeof data.status !== 'string') throw new ApiError(502, 'Unexpected reply from the payment provider')
       setDonationId(data.donationId)
-      if (data.status === 'pending') setPhase('awaiting_confirmation')
+      // 'unresolved' means the row exists but Sifalo never answered. That is NOT a
+      // decline, so it must not be shown as one.
+      if (data.unresolved === true) { setError(null); setPhase('unresolved') }
+      else if (data.status === 'pending') setPhase('awaiting_confirmation')
       else if (data.status === 'succeeded') setPhase('succeeded')
       else if (data.status === 'expired') setPhase('expired')
       else if (data.status === 'failed') setPhase('failed')
@@ -216,6 +219,18 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
             <button type="button" className="confirm-button mt-6" onClick={resetAttempt}>Start over</button>
           </section>
         )}
+        {phase === 'unresolved' && (
+          <section className="rounded-2xl border border-border bg-card p-6 text-center">
+            <p className="eyebrow">Not confirmed</p>
+            <h2 className="mt-3 font-serif text-2xl">We couldn&rsquo;t reach Sifalo.</h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Your donation is recorded as pending. <strong className="text-foreground">Do not pay again</strong> — if money left your account it will be credited once we reconcile. If your phone never asked for a PIN, nothing was charged.
+            </p>
+            <Link href="/profile" className="confirm-button mt-6 inline-block">Go to profile</Link>
+            <button type="button" onClick={resetAttempt} className="mt-3 block w-full py-1 text-center text-xs font-bold text-primary">Try a different number</button>
+          </section>
+        )}
+
         {phase === 'timeout' && (
           <section className="rounded-2xl border border-border bg-card p-6 text-center">
             <p className="eyebrow">Still confirming</p>

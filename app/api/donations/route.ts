@@ -79,18 +79,21 @@ export async function POST(request: Request) {
       await supabase.from('donations').update({ status: outcome.status, updated_at: new Date().toISOString() }).eq('id', donation.id).eq('status', 'pending')
       return json({ donationId: donation.id, status: outcome.status, error: outcome.message }, 200)
     } catch (caught) {
-      // Timeout or transport failure. Sifalo offers no way to look a charge up afterwards,
-      // so the outcome is genuinely unknown: leave it pending for manual settlement rather
-      // than guessing. Guessing 'failed' hides money that did arrive; guessing 'succeeded'
-      // credits money that did not.
+      // The donation row EXISTS and its outcome is unknown. Returning 502 here was wrong
+      // twice over: it says the whole request failed when it did not, and every non-2xx
+      // makes authedFetch throw, which the donate form rendered as "payment failed" — the
+      // one thing we must never claim when we do not know. 202 Accepted is the honest
+      // code: accepted, not yet resolved.
+      console.error('[donations] Sifalo charge unresolved for donation %s: %s', donation.id, caught instanceof Error ? caught.message : caught)
       const unknown = caught instanceof SifaloUnknownError
       return json({
         donationId: donation.id,
         status: 'pending',
+        unresolved: true,
         error: unknown
-          ? 'We lost contact with Sifalo before confirming. If money left your account it will be credited once we reconcile — do not pay again.'
-          : 'Payment provider unavailable',
-      }, 502)
+          ? 'We could not confirm this with Sifalo. If money left your account it will be credited once we reconcile — do not pay again.'
+          : 'Mobile money is temporarily unavailable. Nothing has been charged.',
+      }, 202)
     }
   } catch { return json({ error: 'Invalid request' }, 400) }
 }

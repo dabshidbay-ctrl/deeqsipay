@@ -100,15 +100,10 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
         },
         body: JSON.stringify({ campaignId: campaign.id, amountMinor, idempotencyKey: idempotencyRef.current, anonymous, phone: phone.trim(), wallet }),
       })
-      const data = await res.json() as { donationId?: string; status?: string; unresolved?: boolean; checkoutUrl?: string; error?: string }
+      const data = await res.json() as { donationId?: string; status?: string; unresolved?: boolean; error?: string }
       if (!res.ok && res.status !== 202) throw new ApiError(res.status, data.error ?? 'That did not go through.')
       if (typeof data.donationId !== 'string' || typeof data.status !== 'string') throw new ApiError(502, 'Unexpected reply from the payment provider')
       setDonationId(data.donationId)
-      // Hosted checkout: Sifalo takes the wallet number and PIN on their own page.
-      if (typeof data.checkoutUrl === 'string' && data.checkoutUrl !== '') {
-        window.location.assign(data.checkoutUrl)
-        return
-      }
       // 'unresolved' means the row exists but Sifalo never answered. That is NOT a
       // decline, so it must not be shown as one.
       if (data.unresolved === true) { setError(null); setPhase('unresolved') }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient, requireUser } from '@/lib/server/supabase-admin'
-import { chargeSifalo, createSifaloCheckout, isDirectChargeEnabled, isSifaloWallet, SifaloUnknownError } from '@/lib/server/sifalo'
+import { chargeSifalo, isSifaloWallet, SifaloUnknownError, type SifaloWallet } from '@/lib/server/sifalo'
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status })
 
@@ -21,11 +21,11 @@ export async function POST(request: Request) {
     }
     if (!/^[A-Za-z0-9_-]{16,80}$/.test(body.idempotencyKey)) return json({ error: 'Invalid idempotency key' }, 400)
 
-    // Our checkout collects the number, so validate it whenever one is supplied. It stays
-    // optional: a donor who does not give one simply completes on Sifalo's hosted page.
-    if (body.phone !== undefined && (typeof body.phone !== 'string' || !/^\+?[1-9]\d{7,14}$/.test(body.phone))) {
+    // Required now: the payment happens here, so we must have a number to charge.
+    if (typeof body.phone !== 'string' || !/^\+?[1-9]\d{7,14}$/.test(body.phone)) {
       return json({ error: 'Enter a valid mobile money number' }, 400)
     }
+    if (!isSifaloWallet(body.wallet)) return json({ error: 'Choose which mobile money account to pay from' }, 400)
 
     const supabase = createAdminClient()
 
@@ -57,77 +57,52 @@ export async function POST(request: Request) {
     }
 
     try {
-      const origin = new URL(request.url).origin
-      const wantsDirect = typeof body.phone === 'string' && isSifaloWallet(body.wallet)
-
-      // OUR checkout: the number is entered on our page and we ask Sifalo to push a PIN
-      // prompt to that handset. Preferred whenever the donor gave us a number.
-      if (wantsDirect && typeof body.phone === 'string' && isSifaloWallet(body.wallet)) {
-        try {
-          const outcome = await chargeSifalo({
-            amountMinor: body.amountMinor,
-            currency,
-            account: body.phone,
-            wallet: body.wallet,
-            reference: donation.id,
-            originUrl: origin,
-            ip: clientIp(request),
-          })
-          await supabase.from('payment_attempts').insert({
-            donation_id: donation.id,
-            provider_reference: outcome.providerReference,
-            phone_last4: body.phone.slice(-4),
-            status: outcome.status,
-            raw_status: outcome.rawCode,
-          })
-          if (outcome.status === 'succeeded') {
-            await supabase.rpc('credit_donation', { p_donation_id: donation.id, p_provider_reference: outcome.providerReference })
-            return json({ donationId: donation.id, status: 'succeeded', providerReference: outcome.providerReference }, 201)
-          }
-          await supabase.from('donations').update({ status: outcome.status, updated_at: new Date().toISOString() }).eq('id', donation.id).eq('status', 'pending')
-          return json({ donationId: donation.id, status: outcome.status, error: outcome.message }, 200)
-        } catch (directFailure) {
-          // Direct charging is not provisioned on this merchant account yet — it answers
-          // with an empty body. Rather than fail the donation, fall through to hosted
-          // checkout so the gift still completes. Remove this fallback once Sifalo
-          // enables direct charging and the branch above stops throwing.
-          console.warn('[donations] direct charge unavailable, falling back to hosted checkout: %s', directFailure instanceof Error ? directFailure.message : directFailure)
-        }
-      }
-
-      // Fallback: Sifalo's hosted page collects the number and PIN.
-      const checkout = await createSifaloCheckout({
+      // The payment happens INSIDE our site. The donor entered their number on our page
+      // and Sifalo pushes a PIN prompt to that handset. We never hand the payer off to
+      // pay.sifalo.com — no redirect, no hosted page.
+      const outcome = await chargeSifalo({
         amountMinor: body.amountMinor,
         currency,
+        account: body.phone as string,
+        wallet: body.wallet as SifaloWallet,
         reference: donation.id,
-        returnUrl: `${origin}/donate/complete?d=${donation.id}`,
+        originUrl: new URL(request.url).origin,
         ip: clientIp(request),
       })
 
       await supabase.from('payment_attempts').insert({
         donation_id: donation.id,
-        provider_reference: checkout.key,
-        status: 'pending',
-        raw_status: 'checkout_created',
+        provider_reference: outcome.providerReference,
+        phone_last4: (body.phone as string).slice(-4),
+        status: outcome.status,
+        raw_status: outcome.rawCode,
       })
 
-      return json({ donationId: donation.id, status: 'pending', checkoutUrl: checkout.checkoutUrl }, 201)
+      if (outcome.status === 'succeeded') {
+        await supabase.rpc('credit_donation', { p_donation_id: donation.id, p_provider_reference: outcome.providerReference })
+        return json({ donationId: donation.id, status: 'succeeded' }, 201)
+      }
+
+      await supabase.from('donations').update({ status: outcome.status, updated_at: new Date().toISOString() }).eq('id', donation.id).eq('status', 'pending')
+      return json({ donationId: donation.id, status: outcome.status, error: outcome.message }, 200)
     } catch (caught) {
-      // The donation row EXISTS and its outcome is unknown. Returning 502 here was wrong
-      // twice over: it says the whole request failed when it did not, and every non-2xx
-      // makes authedFetch throw, which the donate form rendered as "payment failed" — the
-      // one thing we must never claim when we do not know. 202 Accepted is the honest
-      // code: accepted, not yet resolved.
-      console.error('[donations] Sifalo charge unresolved for donation %s: %s', donation.id, caught instanceof Error ? caught.message : caught)
-      const unknown = caught instanceof SifaloUnknownError
+      // Sifalo never accepted the charge, so no PIN prompt was ever sent and no money can
+      // have moved. That is a failure to START the payment — report it plainly rather than
+      // leaving the donor staring at a pending state that will never resolve.
+      console.error('[donations] could not start charge for %s: %s', donation.id, caught instanceof Error ? caught.message : caught)
+      await supabase.from('donations').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', donation.id).eq('status', 'pending')
+      await supabase.from('payment_attempts').insert({
+        donation_id: donation.id,
+        provider_reference: donation.id,
+        phone_last4: typeof body.phone === 'string' ? body.phone.slice(-4) : null,
+        status: 'failed',
+        raw_status: caught instanceof SifaloUnknownError ? 'no_response' : 'error',
+      })
       return json({
         donationId: donation.id,
-        status: 'pending',
-        unresolved: true,
-        error: unknown
-          ? 'We could not confirm this with Sifalo. If money left your account it will be credited once we reconcile — do not pay again.'
-          : 'Mobile money is temporarily unavailable. Nothing has been charged.',
-      }, 202)
+        status: 'failed',
+        error: 'We could not start the payment. Nothing has been charged — please try again.',
+      }, 200)
     }
   } catch { return json({ error: 'Invalid request' }, 400) }
 }

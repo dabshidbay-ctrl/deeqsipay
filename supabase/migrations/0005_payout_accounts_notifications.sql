@@ -20,7 +20,9 @@
 create table if not exists public.payout_accounts (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references public.profiles(id) on delete cascade,
-  wallet text not null check (wallet in ('zaad','edahab','pbwallet','bank')),
+  -- No inline check here: Postgres auto-names a column check <table>_<column>_check,
+  -- which would collide with the explicit payout_accounts_wallet_check below.
+  wallet text not null,
   account_number text not null,
   account_name text not null,
   bank_name text,

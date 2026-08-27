@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, ShieldCheck } from 'lucide-react'
-import { ApiError, AuthRequiredError, authedFetch } from '@/lib/supabase/session'
+import { ApiError } from '@/lib/supabase/session'
+import { tryGetSupabaseBrowserClient } from '@/lib/supabase/client'
 import { daysLeft, formatMoney, progressPercent, type Campaign } from '@/lib/campaigns'
 import { SIFALO_WALLETS, type SifaloWallet } from '@/lib/wallets'
 
@@ -24,7 +25,7 @@ function parseAmountMinor(raw: string): number | null {
 
 const PHONE_PATTERN = /^\+?[1-9]\d{7,14}$/
 
-export function DonateForm({ campaign, directCharge = false }: { campaign: Campaign; directCharge?: boolean }) {
+export function DonateForm({ campaign }: { campaign: Campaign }) {
   const router = useRouter()
   const [phase, setPhase] = useState<Phase>('idle')
   const [presetMinor, setPresetMinor] = useState<number | null>(null)
@@ -51,13 +52,20 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
     const deadline = Date.now() + POLL_LIMIT_MS
     const tick = async (): Promise<void> => {
       try {
-        const data = await authedFetch<{ donation?: { status?: string } }>(`/api/donations/${donationId}`)
+        // A guest has no session, so this read is not possible for them — and it does
+        // not need to be: direct charging answers synchronously. Treat a failure here as
+        // "keep waiting", never as a failed payment.
+        const supabase = tryGetSupabaseBrowserClient()
+        const session = supabase ? (await supabase.auth.getSession()).data.session : null
+        if (!session) { if (Date.now() >= deadline) setPhase('timeout'); return }
+        const res = await fetch(`/api/donations/${donationId}`, { headers: { authorization: `Bearer ${session.access_token}` } })
+        if (!res.ok) { if (Date.now() >= deadline) setPhase('timeout'); return }
+        const data = await res.json() as { donation?: { status?: string } }
         if (stopped) return
         const status = data.donation?.status
         if (status === 'succeeded' || status === 'failed' || status === 'expired') setPhase(status)
         else if (Date.now() >= deadline) setPhase('timeout')
       } catch (err) {
-        if (err instanceof AuthRequiredError) router.push(loginNext)
       }
     }
     const interval = window.setInterval(() => { void tick() }, POLL_INTERVAL_MS)
@@ -80,11 +88,20 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
     setPaidMinor(amountMinor)
     setPhase('submitting')
     try {
-      const data = await authedFetch<{ donationId?: string; status?: string; unresolved?: boolean; checkoutUrl?: string }>('/api/donations', {
+      // Guests may donate. A bearer token is attached only when the giver is signed in,
+      // so the donation can be recorded against them.
+      const supabase = tryGetSupabaseBrowserClient()
+      const session = supabase ? (await supabase.auth.getSession()).data.session : null
+      const res = await fetch('/api/donations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId: campaign.id, amountMinor, idempotencyKey: idempotencyRef.current, anonymous, ...(directCharge ? { phone: phone.trim(), wallet } : {}) }),
+        headers: {
+          'content-type': 'application/json',
+          ...(session ? { authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ campaignId: campaign.id, amountMinor, idempotencyKey: idempotencyRef.current, anonymous, phone: phone.trim(), wallet }),
       })
+      const data = await res.json() as { donationId?: string; status?: string; unresolved?: boolean; checkoutUrl?: string; error?: string }
+      if (!res.ok && res.status !== 202) throw new ApiError(res.status, data.error ?? 'That did not go through.')
       if (typeof data.donationId !== 'string' || typeof data.status !== 'string') throw new ApiError(502, 'Unexpected reply from the payment provider')
       setDonationId(data.donationId)
       // Hosted checkout: Sifalo takes the wallet number and PIN on their own page.
@@ -101,7 +118,6 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
       else if (data.status === 'failed') setPhase('failed')
       else { setError('Unexpected payment status.'); setPhase('failed') }
     } catch (err) {
-      if (err instanceof AuthRequiredError) { router.push(loginNext); return }
       if (err instanceof ApiError) { setError(err.message); setPhase('failed'); return }
       // The request never resolved, so the outcome is unknown: keep the same
       // idempotency key so a retry replays the original donation, never a double charge.
@@ -111,7 +127,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
   }
 
   const busy = phase === 'submitting'
-  const phoneValid = !directCharge || PHONE_PATTERN.test(phone.trim())
+  const phoneValid = PHONE_PATTERN.test(phone.trim())
   const canSubmit = phase === 'idle' && amountMinor !== null && !amountInvalid && phoneValid
 
   return (
@@ -162,7 +178,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
               {amountInvalid && <p className="mt-2 text-xs font-semibold text-red-500" role="alert">Enter between $1 and $10,000,000, with at most 2 decimals.</p>}
             </div>
 
-            {directCharge && (
+            {(
               <>
                 <fieldset>
                   <legend className="text-sm font-semibold">Pay from</legend>
@@ -194,7 +210,7 @@ export function DonateForm({ campaign, directCharge = false }: { campaign: Campa
               <input suppressHydrationWarning type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
               <span className="text-xs leading-5"><strong className="block font-semibold">Give anonymously</strong><span className="text-muted-foreground">Your name will show as &ldquo;Anonymous&rdquo; on this campaign. The organiser still sees your donation.</span></span>
             </label>
-            <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> {directCharge ? 'Approve the prompt on your phone to finish' : "You'll finish on Sifalo Pay's secure page"}</p>
+            <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> 'Approve the payment request on your phone'</p>
             {error !== null && <p className="text-xs font-semibold text-red-500" role="alert">{error}</p>}
             <button suppressHydrationWarning type="submit" className="confirm-button" disabled={!canSubmit}>
               {busy ? 'Contacting Sifalo Pay…' : amountMinor !== null ? `Donate ${formatMoney(amountMinor, campaign.currency)}` : 'Choose an amount'}

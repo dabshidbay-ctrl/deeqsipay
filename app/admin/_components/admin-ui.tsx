@@ -13,7 +13,7 @@ export function statusLabel(status: string): string {
 
 // Statuses that mean "this is live and well", "this needs a human", and "this is over".
 const GOOD = new Set(['active', 'completed', 'succeeded', 'approved', 'paid'])
-const WAITING = new Set(['under_review', 'pending', 'requested', 'paused'])
+const WAITING = new Set(['under_review', 'pending', 'requested', 'paused', 'open'])
 
 export function StatusBadge({ status }: { status: string }) {
   const tone = GOOD.has(status)

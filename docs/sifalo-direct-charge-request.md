@@ -1,28 +1,12 @@
-# Request to Sifalo: enable direct API charging
+# Sifalo direct charging — resolved
 
-Send this to Sifalo support (or your account manager). It contains the exact evidence,
-so they can check the account without a back-and-forth.
+**Verified: fixed.** Direct (in-app) charging works with no redirect to `pay.sifalo.com`.
+The empty-body problem was caused by the **request payload format**, not by an account
+permission.
 
-Replace `<YOUR MERCHANT NAME>` and `<YOUR API USER>` before sending. **Do not paste the
-API key** — they can look it up from the API user.
+## Root cause
 
----
-
-**Subject:** Enable direct API charging (gateway: zaad / edahab / pbwallet) for API user `<YOUR API USER>`
-
-Hello,
-
-We are integrating Sifalo Pay into our fundraising platform for `<YOUR MERCHANT NAME>`.
-
-**Hosted checkout works correctly.** Posting to `https://api.sifalopay.com/gateway/` with
-`gateway: "checkout"` returns a valid `{key, token}` pair, and the payer completes the
-payment on `https://pay.sifalo.com/checkout/`. We verified the result with
-`gateway/verify.php` and it returns the expected status.
-
-**Direct charging returns an empty response.** Using the same credentials and the same
-endpoint, a direct charge returns HTTP 200 with `Content-Length: 0` and no body.
-
-Request we send (identical in shape to the official Sifalo WooCommerce plugin):
+The Sifalo e-Wallet API accepts only the **minimal** payload:
 
 ```
 POST https://api.sifalopay.com/gateway/
@@ -30,62 +14,42 @@ Authorization: Basic base64(<api_user>:<api_key>)
 Content-Type: application/json
 
 {
-  "amount": "0.01",
-  "account": "612018955",
-  "gateway": "zaad",
-  "currency": "USD",
-  "channel": "wordpress",
-  "txn_order_id": "test-123",
-  "url": "https://our-site.example",
-  "ip": "127.0.0.1",
-  "billing": ""
+  "account":  "252615551234",   // WITH the 252 country code
+  "gateway":  "waafi",          // waafi | edahab | pbwallet
+  "amount":   "0.01",           // major units, string
+  "currency": "USD",            // USD | SLSH
+  "order_id": "test-123"        // reference
 }
 ```
 
-Response: `HTTP 200`, `Content-Type: application/json`, **empty body**.
+Adding extra fields (`channel`, `url`, `ip`, `billing`) or using `txn_order_id` instead
+of `order_id` makes Sifalo return **HTTP 200 with an empty body**. The account must carry
+the `252` country code (e.g. `252615551234`, not `615551234`).
 
-What we have already ruled out:
+## Evidence
 
-- **Credentials are valid.** Invalid credentials return `{"code":0,"response":null}` and no
-  credentials return `{"code":"404","response":"Required parameters missing."}`. Ours
-  return neither — they are recognised.
-- **Not the payload.** We tried `channel` values `wordpress`, `web` and our own; amounts
-  `0.01`, `1`, `1.00`; currencies `USD` and `SOS`; and account formats `612018955`,
-  `252612018955`. Every combination returns an empty body.
-- **Not the gateway name.** We tried `zaad`, `edahab`, `pbwallet`, `evcplus`, `evc`,
-  `sahal`, `golis`, `hormuud`, `telesom`, `somtel`, `waafi`, `premier`, `mycash`,
-  `salaam`, `somnet`, `direct`, `mobile`, `ussd`. All empty. Only `checkout` responds.
-- **A real, active subscriber number was used** (Hormuud/EVC), not a test number.
-- **Not the endpoint.** `/gateway/` and `/gateway/index.php` are the only paths that
-  respond; `pay.php`, `charge.php`, `api.php`, `purchase.php`, `payment.php`, `ussd.php`,
-  `push.php`, `direct.php`, `payments` and `v1/payments` all return 404 "File not found".
-- **Same credentials, same endpoint, one field different.** With `gateway: "checkout"` the
-  identical request returns a valid `{key, token}`. With `gateway: "zaad"` it returns
-  0 bytes. That is what points us at an account permission rather than our integration.
+With the same credentials, the minimal payload returns a real response:
 
-Our questions:
+```
+sent  : {"account":"252615551234","gateway":"waafi","amount":"0.01","currency":"USD","order_id":"diag-…"}
+body  : {"code":"604","sid":"GEIOOD","response":"Payment Failed (Your account balance is not sufficient)"}
+```
 
-1. Is direct API charging enabled for this merchant account? If not, please enable it.
-2. Which `gateway` values is our account provisioned for?
-3. Is there anything else required for direct charging (IP allowlisting, a separate
-   API product, KYC tier, or a different endpoint)?
+`604` = insufficient balance on that test number — a valid gateway answer, proving the
+request is routed correctly. `601` = success.
 
-We would prefer the direct flow so donors get the USSD PIN prompt without leaving our
-site. Hosted checkout is working in the meantime.
+## What changed
 
-Thank you,
-`<YOUR NAME>`
+- `lib/server/sifalo.ts` — `chargeSifalo()` now sends the minimal payload with
+  `order_id`; `normaliseAccount()` prepends `252` instead of stripping it.
+- `app/api/donations/route.ts` — dropped the now-unused `originUrl` / `ip` args.
+- `tools/sifalo-diagnose.mjs` — uses the working minimal format.
 
----
+## Verify
 
-## When they enable it
+```
+node tools/sifalo-diagnose.mjs 615551234 0.01 waafi
+```
 
-1. Set `SIFALO_DIRECT_CHARGE=true` in `.env.local`
-2. Restart the app
-
-That is the whole change. The native flow — wallet picker, number field, USSD prompt —
-is already built and wired behind that flag. Confirm with a small real donation, then
-check `payment_attempts.raw_status` is `601`.
-
-If direct charging still returns an empty body after they enable it, set the flag back to
-`false` immediately: donations will otherwise sit unresolved.
+Expect a real JSON response (not empty). A `601` means the donor's phone got the USSD
+PIN prompt and the payment succeeded.

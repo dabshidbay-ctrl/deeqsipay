@@ -8,9 +8,21 @@ export type Campaign = {
   donorCount: number
   currency: string
   imageUrl: string | null
+  photos: string[]
+  feePercent: number
   endsAt: string | null
   createdAt: string
-  owner: { displayName: string; avatarUrl: string | null } | null
+  owner: { displayName: string; fullName: string | null; avatarUrl: string | null } | null
+}
+
+/** Net amount after the platform fee (default 6%). */
+export function netMinor(raisedMinor: number, feePercent: number): number {
+  return raisedMinor - Math.round(raisedMinor * (feePercent / 100))
+}
+
+/** Fee amount in minor units. */
+export function feeMinor(raisedMinor: number, feePercent: number): number {
+  return Math.round(raisedMinor * (feePercent / 100))
 }
 
 export function formatMoney(minor: number, currency: string): string {
@@ -45,13 +57,21 @@ export function mapCampaignRow(row: Record<string, unknown>): Campaign {
   // as an array without generated DB types. Handle both or owner names silently blank out.
   const rawProfile = row.profiles
   const profile = (Array.isArray(rawProfile) ? rawProfile[0] ?? null : rawProfile ?? null) as
-    { display_name?: unknown; avatar_url?: unknown } | null
+    { display_name?: unknown; full_name?: unknown; avatar_url?: unknown } | null
   const owner = profile
     ? {
         displayName: typeof profile.display_name === 'string' ? profile.display_name : '',
+        fullName: typeof profile.full_name === 'string' ? profile.full_name : null,
         avatarUrl: typeof profile.avatar_url === 'string' ? profile.avatar_url : null,
       }
     : null
+  // photos arrives as a PostgREST JSON array (string like "{url1,url2}") or as a JS array.
+  const rawPhotos = row.photos
+  const photos: string[] = Array.isArray(rawPhotos)
+    ? rawPhotos.filter((p): p is string => typeof p === 'string')
+    : typeof rawPhotos === 'string' && rawPhotos.startsWith('{')
+      ? rawPhotos.slice(1, -1).split(',').filter(Boolean)
+      : []
   return {
     id: String(row.id),
     title: String(row.title),
@@ -62,6 +82,8 @@ export function mapCampaignRow(row: Record<string, unknown>): Campaign {
     donorCount: Number(row.donor_count),
     currency: String(row.currency),
     imageUrl: typeof row.image_url === 'string' ? row.image_url : null,
+    photos,
+    feePercent: typeof row.fee_percent === 'number' ? row.fee_percent : 6,
     endsAt: typeof row.ends_at === 'string' ? row.ends_at : null,
     createdAt: String(row.created_at),
     owner,

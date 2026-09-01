@@ -3,7 +3,7 @@ import { createAuthClient } from '@/lib/server/supabase-admin'
 import { mapCampaignRow, type Campaign } from '@/lib/campaigns'
 
 // Explicit columns, not '*': keeps the payload stable if the table gains columns.
-const CAMPAIGN_SELECT = 'id,title,description,category,goal_minor,raised_minor,donor_count,currency,image_url,ends_at,created_at, profiles!campaigns_owner_id_fkey(display_name, avatar_url)'
+const CAMPAIGN_SELECT = 'id,title,description,category,goal_minor,raised_minor,donor_count,currency,image_url,photos,fee_percent,ends_at,created_at, profiles!campaigns_owner_id_fkey(display_name, full_name, avatar_url)'
 const DEFAULT_LIMIT = 50
 
 async function fetchCampaigns(opts?: { category?: string; limit?: number }): Promise<Campaign[]> {

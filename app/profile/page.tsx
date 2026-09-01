@@ -14,13 +14,14 @@ export default async function ProfilePage() {
   const supabase = await createSupabaseServerClient()
 
   const [{ data: profileRow }, { data: campaignRows }, { data: donationRows }] = await Promise.all([
-    supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle(),
+    supabase.from('profiles').select('display_name, full_name').eq('id', user.id).maybeSingle(),
     supabase.from('campaigns').select('id,title,status,goal_minor,raised_minor,donor_count,currency').eq('owner_id', user.id).order('created_at', { ascending: false }),
     supabase.from('donations').select('amount_minor,campaign_id').eq('donor_id', user.id).eq('status', 'succeeded'),
   ])
 
-  const profile = (profileRow ?? null) as { display_name?: string | null } | null
+  const profile = (profileRow ?? null) as { display_name?: string | null; full_name?: string | null } | null
   const name = profile?.display_name?.trim() || user.email?.split('@')[0] || 'Friend'
+  const fullName = profile?.full_name?.trim() || null
   const owned = (campaignRows ?? []) as OwnedCampaign[]
   const donations = (donationRows ?? []) as DonationRow[]
 
@@ -30,8 +31,8 @@ export default async function ProfilePage() {
   const raisedMinor = owned.reduce((sum, campaign) => sum + Number(campaign.raised_minor), 0)
   const donorTotal = owned.reduce((sum, campaign) => sum + Number(campaign.donor_count), 0)
 
-  return <PageFrame active="profile" eyebrow="your kindred profile">
-    <section className="px-5 pb-6 pt-8"><div className="flex items-center gap-4"><div className="grid size-20 place-items-center rounded-full bg-accent-soft text-xl font-bold text-primary">{initials(name)}</div><div><p className="eyebrow">Welcome back</p><h1 className="mt-1 font-serif text-3xl">{name}</h1><p className="text-sm text-muted-foreground">{user.email}</p></div></div></section>
+  return <PageFrame active="profile" eyebrow="your deeqsipay profile">
+    <section className="px-5 pb-6 pt-8"><div className="flex items-center gap-4"><div className="grid size-20 place-items-center rounded-full bg-accent-soft text-xl font-bold text-primary">{initials(name)}</div><div><p className="eyebrow">Welcome back</p><h1 className="mt-1 font-serif text-3xl">{name}</h1>{fullName && <p className="text-xs text-muted-foreground mt-0.5">{fullName}</p>}<p className="text-sm text-muted-foreground">{user.email}</p></div></div></section>
     <section className="space-y-3 px-5">
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-card p-4"><Heart className="text-primary" size={18} /><p className="mt-4 font-serif text-2xl">{supportedCount}</p><p className="text-xs text-muted-foreground">campaigns supported</p></div>

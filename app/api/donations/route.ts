@@ -1,31 +1,31 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient, requireUser } from '@/lib/server/supabase-admin'
-import { chargeSifalo, isSifaloWallet, SifaloUnknownError, type SifaloWallet } from '@/lib/server/sifalo'
+import { chargeSifalo, isDirectChargeEnabled, isSifaloWallet, SifaloUnknownError, type SifaloWallet } from '@/lib/server/sifalo'
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status })
-
-function clientIp(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-for')
-  if (forwarded) return forwarded.split(',')[0]?.trim() ?? '0.0.0.0'
-  return request.headers.get('x-real-ip') ?? '0.0.0.0'
-}
 
 export async function POST(request: Request) {
   try {
     // Donating never requires an account. If the giver happens to be signed in we attach
     // the donation to them so it appears in their history; otherwise it is a guest gift.
     const user = await requireUser(request).catch(() => null)
-    const body = await request.json() as { campaignId?: string; amountMinor?: number; idempotencyKey?: string; anonymous?: boolean; phone?: string; wallet?: unknown }
+    const body = await request.json() as { campaignId?: string; amountMinor?: number; idempotencyKey?: string; anonymous?: boolean; donorName?: string; phone?: string; wallet?: unknown }
     if (!body.campaignId || !body.idempotencyKey || typeof body.amountMinor !== 'number' || !Number.isSafeInteger(body.amountMinor) || body.amountMinor < 100 || body.amountMinor > 1000000000) {
       return json({ error: 'Invalid donation request' }, 400)
     }
     if (!/^[A-Za-z0-9_-]{16,80}$/.test(body.idempotencyKey)) return json({ error: 'Invalid idempotency key' }, 400)
+
+    // Donor name is required. Even if anonymous is checked, we record the name
+    // so the organiser can see who gave.
+    const donorName = typeof body.donorName === 'string' ? body.donorName.trim().slice(0, 120) : ''
+    if (donorName.length < 1) return json({ error: 'Please enter your name' }, 400)
 
     // Required now: the payment happens here, so we must have a number to charge.
     if (typeof body.phone !== 'string' || !/^\+?[1-9]\d{7,14}$/.test(body.phone)) {
       return json({ error: 'Enter a valid mobile money number' }, 400)
     }
     if (!isSifaloWallet(body.wallet)) return json({ error: 'Choose which mobile money account to pay from' }, 400)
+    if (!isDirectChargeEnabled()) return json({ error: 'Payments are temporarily unavailable. Please try again shortly.' }, 503)
 
     const supabase = createAdminClient()
 
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     if (!campaign) return json({ error: 'Campaign unavailable' }, 404)
     const currency = typeof campaign.currency === 'string' ? campaign.currency : 'USD'
 
-    const { data: donation, error } = await supabase.from('donations').insert({ campaign_id: campaign.id, donor_id: user?.id ?? null, amount_minor: body.amountMinor, currency, is_anonymous: body.anonymous === true, idempotency_key: body.idempotencyKey }).select('id').single()
+    const { data: donation, error } = await supabase.from('donations').insert({ campaign_id: campaign.id, donor_id: user?.id ?? null, amount_minor: body.amountMinor, currency, is_anonymous: body.anonymous === true, guest_name: donorName, idempotency_key: body.idempotencyKey }).select('id').single()
     if (error || !donation) {
       // 23505 on (donor_id, idempotency_key): a concurrent request for the SAME logical
       // donation won the race. Return its row rather than 500-ing and inviting a retry
@@ -66,8 +66,6 @@ export async function POST(request: Request) {
         account: body.phone as string,
         wallet: body.wallet as SifaloWallet,
         reference: donation.id,
-        originUrl: new URL(request.url).origin,
-        ip: clientIp(request),
       })
 
       await supabase.from('payment_attempts').insert({

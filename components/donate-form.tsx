@@ -31,9 +31,12 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
   const [presetMinor, setPresetMinor] = useState<number | null>(null)
   const [customAmount, setCustomAmount] = useState('')
   const [anonymous, setAnonymous] = useState(false)
+  // Donor's name — required so the organiser can see who gave. If anonymous is
+  // checked, the name is still recorded but shown as "Anonymous" on the public list.
+  const [donorName, setDonorName] = useState('')
   // Only collected in direct mode; hosted checkout takes both on Sifalo's page.
   const [phone, setPhone] = useState('')
-  const [wallet, setWallet] = useState<SifaloWallet>('zaad')
+  const [wallet, setWallet] = useState<SifaloWallet>('waafi')
   const [error, setError] = useState<string | null>(null)
   const [donationId, setDonationId] = useState<string | null>(null)
   const [paidMinor, setPaidMinor] = useState<number | null>(null)
@@ -45,6 +48,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
   const amountMinor = customMinor ?? presetMinor
   const amountInvalid = trimmedCustom !== '' && customMinor === null
   const daysRemaining = daysLeft(campaign.endsAt)
+  const nameValid = donorName.trim().length >= 1 && donorName.trim().length <= 120
 
   useEffect(() => {
     if (phase !== 'awaiting_confirmation' || donationId === null) return
@@ -65,7 +69,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
         const status = data.donation?.status
         if (status === 'succeeded' || status === 'failed' || status === 'expired') setPhase(status)
         else if (Date.now() >= deadline) setPhase('timeout')
-      } catch (err) {
+      } catch {
       }
     }
     const interval = window.setInterval(() => { void tick() }, POLL_INTERVAL_MS)
@@ -98,7 +102,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
           'content-type': 'application/json',
           ...(session ? { authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify({ campaignId: campaign.id, amountMinor, idempotencyKey: idempotencyRef.current, anonymous, phone: phone.trim(), wallet }),
+        body: JSON.stringify({ campaignId: campaign.id, amountMinor, idempotencyKey: idempotencyRef.current, anonymous, donorName: donorName.trim(), phone: phone.trim(), wallet }),
       })
       const data = await res.json() as { donationId?: string; status?: string; unresolved?: boolean; error?: string }
       if (!res.ok && res.status !== 202) throw new ApiError(res.status, data.error ?? 'That did not go through.')
@@ -123,7 +127,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
 
   const busy = phase === 'submitting'
   const phoneValid = PHONE_PATTERN.test(phone.trim())
-  const canSubmit = phase === 'idle' && amountMinor !== null && !amountInvalid && phoneValid
+  const canSubmit = phase === 'idle' && amountMinor !== null && !amountInvalid && phoneValid && nameValid
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -175,6 +179,11 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
 
             {(
               <>
+                <label className="block text-sm font-semibold">Your name
+                  <input suppressHydrationWarning value={donorName} onChange={(event) => setDonorName(event.target.value)} type="text" autoComplete="name"
+                    required minLength={1} maxLength={120} placeholder="Enter your full name" disabled={busy} className="amount-input" />
+                </label>
+
                 <fieldset>
                   <legend className="text-sm font-semibold">Pay from</legend>
                   <div className="mt-2 grid gap-2">
@@ -203,9 +212,9 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
 
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3">
               <input suppressHydrationWarning type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} className="mt-0.5 size-4 accent-[var(--primary)]" />
-              <span className="text-xs leading-5"><strong className="block font-semibold">Give anonymously</strong><span className="text-muted-foreground">Your name will show as &ldquo;Anonymous&rdquo; on this campaign. The organiser still sees your donation.</span></span>
+              <span className="text-xs leading-5"><strong className="block font-semibold">Give anonymously</strong><span className="text-muted-foreground">Your name will show as &ldquo;Anonymous&rdquo; on the public campaign page, but the organiser will still see your name.</span></span>
             </label>
-            <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> 'Approve the payment request on your phone'</p>
+            <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> &lsquo;Approve the payment request on your phone&rsquo;</p>
             {error !== null && <p className="text-xs font-semibold text-red-500" role="alert">{error}</p>}
             <button suppressHydrationWarning type="submit" className="confirm-button" disabled={!canSubmit}>
               {busy ? 'Contacting Sifalo Pay…' : amountMinor !== null ? `Donate ${formatMoney(amountMinor, campaign.currency)}` : 'Choose an amount'}

@@ -26,9 +26,9 @@ export default async function AdminOverviewPage() {
   const openPayoutMinor = openPayouts.reduce((sum, payout) => sum + Number(payout.amount_minor), 0)
 
   return <div>
-    <SectionHeading eyebrow="platform overview" title="How kindred is doing today." />
+    <SectionHeading eyebrow="platform overview" title="How deeqsipay is doing today." />
 
-    {campaigns.length === 0 ? <EmptyState title="Nothing to moderate yet." body="No one has started a campaign on kindred. When they do, the numbers land here." /> : <>
+    {campaigns.length === 0 ? <EmptyState title="Nothing to moderate yet." body="No one has started a campaign on deeqsipay. When they do, the numbers land here." /> : <>
       <section className="mt-6 rounded-2xl bg-primary p-5 text-primary-foreground">
         <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary-foreground/70">Total raised, platform-wide</p>
         <p className="mt-2 font-serif text-[40px] leading-none tracking-[-0.04em]">{formatMoney(raisedMinor, currency)}</p>

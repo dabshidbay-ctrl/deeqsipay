@@ -1,13 +1,17 @@
 /**
- * Sifalo Pay — verified against their official WooCommerce plugin (sifalo-pay),
- * which is the only public description of this API.
+ * Sifalo Pay — verified against the live gateway AND the user's other website,
+ * which charges successfully with the same credentials.
  *
  *   POST https://api.sifalopay.com/gateway/
  *   Authorization: Basic base64(api_user_id:api_key)
  *   Content-Type: application/json
- *   { amount, account, gateway, currency, channel, txn_order_id, url, ip, billing }
+ *   { account, gateway, amount, currency, order_id }
  *
- * Response: { code, response }. 601 is success; the 60x codes below are failures.
+ * The MINIMAL payload is what works. Adding extra fields (channel, url, ip,
+ * billing) or using txn_order_id instead of order_id makes Sifalo return an
+ * EMPTY body. The account must carry the 252 country code (e.g. 252615551234).
+ *
+ * Response: { code, response, sid }. 601 is success; the 60x codes below are failures.
  *
  * IMPORTANT — this API is SYNCHRONOUS and has NO webhook and NO status-lookup
  * endpoint for direct charges. The payer approves on their handset while the HTTP
@@ -58,9 +62,6 @@ type ChargeInput = {
   account: string
   wallet: SifaloWallet
   reference: string
-  originUrl: string
-  ip: string
-  billing?: string
 }
 
 function getConfig() {
@@ -74,12 +75,11 @@ function getConfig() {
 /**
  * Direct (in-app) charging vs hosted checkout.
  *
- * Verified against the live gateway: this merchant account returns an EMPTY body for
- * every direct-charge gateway, so direct charging is NOT provisioned. chargeSifalo() is
- * kept and fully wired behind this flag — flip SIFALO_DIRECT_CHARGE=true the moment
- * Sifalo enables it and the native flow takes over with no code change.
- *
- * Leave it off until Sifalo confirms, otherwise every donation dies in an empty response.
+ * Verified against the live gateway with the SAME credentials used by the user's
+ * other website: the minimal payload { account, gateway, amount, currency,
+ * order_id } returns a real response. Direct charging IS provisioned on this
+ * account. chargeSifalo() is wired behind this flag so it can be toggled without
+ * a code change.
  */
 export function isDirectChargeEnabled(): boolean {
   return process.env.SIFALO_DIRECT_CHARGE === 'true'
@@ -90,14 +90,14 @@ export function isSifaloConfigured(): boolean {
 }
 
 /**
- * Sifalo's own checkout field asks for the plain local wallet number ("Enter your EVC,
- * ZAAD or SAHAL number"), but our donate form invited "+252 61 555 1234" and we passed it
- * through verbatim — plus sign and all. Strip to digits and drop a leading 252 country
- * code so the gateway receives the format it actually expects.
+ * Sifalo expects the account WITH the 252 country code (e.g. 252615551234). The
+ * donate form invites a plain local number ("615551234"), so prepend 252 when it
+ * is missing. Strip any non-digit characters and a leading + first.
  */
 export function normaliseAccount(raw: string): string {
   const digits = raw.replace(/\D/g, '')
-  return digits.startsWith('252') && digits.length > 9 ? digits.slice(3) : digits
+  if (digits.startsWith('252')) return digits
+  return `252${digits}`
 }
 
 /** Amounts go to Sifalo in MAJOR units with 2 decimals; we hold minor units everywhere else. */
@@ -115,15 +115,11 @@ export async function chargeSifalo(input: ChargeInput): Promise<SifaloOutcome> {
       method: 'POST',
       headers: { authorization: `Basic ${authorization}`, 'content-type': 'application/json' },
       body: JSON.stringify({
-        amount: toMajorUnits(input.amountMinor),
         account: normaliseAccount(input.account),
         gateway: input.wallet,
+        amount: toMajorUnits(input.amountMinor),
         currency: input.currency,
-        channel: 'kindred',
-        txn_order_id: input.reference,
-        url: input.originUrl,
-        ip: input.ip,
-        billing: input.billing ?? '',
+        order_id: input.reference,
       }),
       cache: 'no-store',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -185,7 +181,7 @@ export async function pingSifalo(): Promise<{ ok: boolean; detail: string }> {
       method: 'POST',
       headers: { authorization: `Basic ${auth}`, 'content-type': 'application/json' },
       // Deliberately unroutable account: this can never correspond to a real subscriber.
-      body: JSON.stringify({ amount: '0.01', account: '000000000', gateway: 'zaad', currency: 'USD', channel: 'kindred', txn_order_id: `ping-${Date.now()}`, url: 'https://kindred.local', ip: '127.0.0.1', billing: '' }),
+      body: JSON.stringify({ amount: '0.01', account: '252000000000', gateway: 'waafi', currency: 'USD', order_id: `ping-${Date.now()}` }),
       cache: 'no-store',
       signal: AbortSignal.timeout(20_000),
     })

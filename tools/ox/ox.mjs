@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 const ROOT = resolve(import.meta.dirname, '../..')
-const MODEL = process.env.OX_MODEL || 'stealth/ox-alpha'
+const MODEL = process.env.OX_MODEL || 'deepseek/deepseek-v4-flash-0731'
 
 function key() {
   if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY

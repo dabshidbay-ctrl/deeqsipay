@@ -5,15 +5,13 @@ const json = (body: unknown, status = 200) => NextResponse.json(body, { status }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-type SavedCampaign = { id: string; title: string; category: string; goal_minor: number; raised_minor: number; donor_count: number; image_url: string | null }
-// PostgREST returns an object for this to-one embed, but supabase-js types embeds as
-// arrays without generated DB types. Accept either shape.
+type SavedCampaign = { id: string; title: string; category: string; goal_minor: number; raised_minor: number; donor_count: number; image_url: string | null; photos: string[] | null }
 type SavedCampaignRow = { campaigns: SavedCampaign | SavedCampaign[] | null }
 
 export async function GET(request: Request) {
   const user = await requireUser(request)
   if (!user) return json({ error: 'Authentication required' }, 401)
-  const { data, error } = await createAdminClient().from('saved_campaigns').select('campaigns!saved_campaigns_campaign_id_fkey(id,title,category,goal_minor,raised_minor,donor_count,image_url)').eq('user_id', user.id).order('created_at', { ascending: false })
+  const { data, error } = await createAdminClient().from('saved_campaigns').select('campaigns!saved_campaigns_campaign_id_fkey(id,title,category,goal_minor,raised_minor,donor_count,image_url,photos)').eq('user_id', user.id).order('created_at', { ascending: false })
   if (error) return json({ error: 'Unable to load saved campaigns' }, 500)
   const rows = (data ?? []) as unknown as SavedCampaignRow[]
   return json({ campaigns: rows.flatMap((row) => (row.campaigns ? (Array.isArray(row.campaigns) ? row.campaigns : [row.campaigns]) : [])) })

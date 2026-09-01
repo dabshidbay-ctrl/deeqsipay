@@ -15,6 +15,7 @@ type DonationRow = {
   status: string
   created_at: string
   is_anonymous: boolean
+  guest_name: string | null
   campaign_id: string
   campaigns: CampaignEmbed | CampaignEmbed[] | null
   profiles: DonorEmbed | DonorEmbed[] | null
@@ -29,7 +30,7 @@ export default async function AdminTransactionsPage({ searchParams }: { searchPa
 
   let query = supabase
     .from('donations')
-    .select('id,amount_minor,status,created_at,is_anonymous,campaign_id,campaigns!donations_campaign_id_fkey(id,title,currency),profiles!donations_donor_id_fkey(display_name)')
+    .select('id,amount_minor,status,created_at,is_anonymous,guest_name,campaign_id,campaigns!donations_campaign_id_fkey(id,title,currency),profiles!donations_donor_id_fkey(display_name)')
     .order('created_at', { ascending: false })
     .limit(PAGE_LIMIT)
   if (status !== null) query = query.eq('status', status)
@@ -58,7 +59,7 @@ export default async function AdminTransactionsPage({ searchParams }: { searchPa
       <ul className="mt-3 space-y-2.5">{donations.map((donation) => {
         const campaign = embedded(donation.campaigns)
         const donor = embedded(donation.profiles)
-        const name = donor?.display_name?.trim() || 'Unnamed donor'
+        const name = donation.guest_name?.trim() || donor?.display_name?.trim() || 'Unnamed donor'
         const refunded = donation.status === 'refunded'
         return <li key={donation.id} className="rounded-xl border border-border bg-card p-3">
           <div className="flex items-center gap-3">

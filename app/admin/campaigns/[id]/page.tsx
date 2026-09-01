@@ -8,7 +8,7 @@ import { CampaignActions } from './campaign-actions'
 import { IdentityViewer } from './identity-viewer'
 import { LedgerPanel } from './ledger-panel'
 
-type OwnerEmbed = { display_name: string | null }
+type OwnerEmbed = { display_name: string | null; full_name: string | null }
 type CampaignDetail = {
   id: string
   title: string
@@ -20,6 +20,8 @@ type CampaignDetail = {
   donor_count: number
   currency: string
   image_url: string | null
+  photos: string[] | null
+  fee_percent: number | null
   ends_at: string | null
   created_at: string
   owner_id: string
@@ -36,7 +38,7 @@ export default async function AdminCampaignDetailPage({ params }: { params: Prom
 
   const { data } = await supabase
     .from('campaigns')
-    .select('id,title,description,category,status,goal_minor,raised_minor,donor_count,currency,image_url,ends_at,created_at,owner_id,review_note,reviewed_at,contact_phones,identity_document_path,profiles!campaigns_owner_id_fkey(display_name)')
+    .select('id,title,description,category,status,goal_minor,raised_minor,donor_count,currency,image_url,photos,fee_percent,ends_at,created_at,owner_id,review_note,reviewed_at,contact_phones,identity_document_path,profiles!campaigns_owner_id_fkey(display_name,full_name)')
     .eq('id', id)
     .maybeSingle()
 
@@ -81,7 +83,22 @@ export default async function AdminCampaignDetailPage({ params }: { params: Prom
 
     <section className="mt-6">
       <p className="eyebrow">The story as told</p>
-      {campaign.image_url !== null && <img src={campaign.image_url} alt="" className="campaign-image mt-3 rounded-2xl" />}
+      {campaign.image_url !== null && (
+        <div className="mt-3">
+          <img src={campaign.image_url} alt="" className="campaign-image rounded-2xl" />
+          {/* Show remaining gallery photos as a strip */}
+          {Array.isArray(campaign.photos) && campaign.photos.length > 1 && (
+            <div className="mt-2 flex gap-2 overflow-x-auto scrollbar-hidden">
+              {campaign.photos.map((photo, index) => (
+                <img key={index} src={photo} alt={`Photo ${index + 1}`} className="h-20 w-20 shrink-0 rounded-xl object-cover border border-border" />
+              ))}
+            </div>
+          )}
+          {Array.isArray(campaign.photos) && campaign.photos.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">{campaign.photos.length} photo{campaign.photos.length !== 1 ? 's' : ''}</p>
+          )}
+        </div>
+      )}
       <p className="mt-3 whitespace-pre-line text-sm leading-7">{campaign.description}</p>
     </section>
 

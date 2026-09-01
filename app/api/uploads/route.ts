@@ -16,8 +16,9 @@ import { createAdminClient, requireUser } from '@/lib/server/supabase-admin'
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status })
 
 const KINDS = {
-  'campaign-image': { bucket: 'campaign-images', maxBytes: 5 * 1024 * 1024, mimes: ['image/jpeg', 'image/png', 'image/webp'] },
-  'identity-document': { bucket: 'identity-documents', maxBytes: 10 * 1024 * 1024, mimes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] },
+  'campaign-image': { bucket: 'campaign-images', maxBytes: 5 * 1024 * 1024, mimes: ['image/jpeg', 'image/png', 'image/webp'] as const, multiple: false },
+  'campaign-photos': { bucket: 'campaign-images', maxBytes: 5 * 1024 * 1024, mimes: ['image/jpeg', 'image/png', 'image/webp'] as const, multiple: true },
+  'identity-document': { bucket: 'identity-documents', maxBytes: 10 * 1024 * 1024, mimes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const, multiple: false },
 } as const
 
 type Kind = keyof typeof KINDS
@@ -45,6 +46,37 @@ export async function POST(request: Request) {
   const kind = String(form.get('kind') ?? '')
   if (!(kind in KINDS)) return json({ error: 'Unknown upload kind' }, 400)
   const spec = KINDS[kind as Kind]
+
+  // Handle multiple file uploads for campaign-photos
+  if (spec.multiple) {
+    const files: File[] = []
+    for (const entry of form.getAll('file')) {
+      if (entry instanceof File && entry.size > 0) files.push(entry)
+    }
+    if (files.length === 0) return json({ error: 'No files received' }, 400)
+    if (files.length > 30) return json({ error: 'Maximum 30 photos per campaign' }, 400)
+
+    const supabase = createAdminClient()
+    const urls: string[] = []
+
+    for (const file of files) {
+      if (file.size > spec.maxBytes) {
+        return json({ error: `"${file.name}" is too large. Each photo must be under ${Math.floor(spec.maxBytes / 1024 / 1024)} MB` }, 413)
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const actual = sniff(bytes)
+      if (actual === null || !spec.mimes.includes(actual as never)) {
+        return json({ error: `"${file.name}" is not a supported image format. Upload JPG, PNG or WebP.` }, 415)
+      }
+      const path = `${user.id}/${randomUUID()}.${EXTENSIONS[actual]}`
+      const { error } = await supabase.storage.from(spec.bucket).upload(path, bytes, { contentType: actual, upsert: false })
+      if (error) return json({ error: `Unable to store "${file.name}"` }, 500)
+      const { data } = supabase.storage.from(spec.bucket).getPublicUrl(path)
+      urls.push(data.publicUrl)
+    }
+
+    return json({ urls }, 201)
+  }
 
   const file = form.get('file')
   if (!(file instanceof File) || file.size === 0) return json({ error: 'No file received' }, 400)

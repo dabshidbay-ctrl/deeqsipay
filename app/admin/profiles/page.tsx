@@ -59,7 +59,7 @@ export default async function AdminProfilesPage() {
   const organisers = [...byOwner.values()].sort((a, b) => b.raisedMinor - a.raisedMinor)
 
   return <div>
-    <SectionHeading eyebrow="the people behind it" title="Organisers on kindred." />
+    <SectionHeading eyebrow="the people behind it" title="Organisers on deeqsipay." />
 
     {organisers.length === 0 ? <EmptyState title="No organisers yet." body="Anyone who starts a campaign shows up here with what they have raised." /> : <>
       <p className="mt-4 text-xs text-muted-foreground">{organisers.length} {organisers.length === 1 ? 'person has' : 'people have'} started a campaign</p>

@@ -14,7 +14,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!uuidPattern.test(id)) return NextResponse.json({ error: 'Invalid campaign id' }, { status: 400 })
-  const { data, error } = await createAdminClient().from('campaigns').select('id,owner_id,title,description,category,goal_minor,raised_minor,donor_count,currency,status,image_url,ends_at,created_at,profiles!campaigns_owner_id_fkey(display_name,avatar_url)').eq('id', id).eq('status', 'active').maybeSingle()
+  const { data, error } = await createAdminClient().from('campaigns').select('id,owner_id,title,description,category,goal_minor,raised_minor,donor_count,currency,status,image_url,photos,fee_percent,ends_at,created_at,profiles!campaigns_owner_id_fkey(display_name,full_name,avatar_url)').eq('id', id).eq('status', 'active').maybeSingle()
   if (error) return NextResponse.json({ error: 'Unable to load campaign' }, { status: 500 })
   if (!data) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
   return NextResponse.json({ campaign: data })
@@ -26,8 +26,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   if (!uuidPattern.test(id)) return NextResponse.json({ error: 'Invalid campaign id' }, { status: 400 })
   try {
-    const body = await request.json() as { title?: string; description?: string; category?: string; imageUrl?: string | null; status?: string }
-    const patch: { title?: string; description?: string; category?: string; image_url?: string | null; status?: string } = {}
+    const body = await request.json() as { title?: string; description?: string; category?: string; imageUrl?: string | null; photos?: string[]; status?: string }
+    const patch: { title?: string; description?: string; category?: string; image_url?: string | null; photos?: string[]; status?: string } = {}
     if (body.title !== undefined) {
       const title = body.title.trim()
       if (title.length < 8 || title.length > 120) return NextResponse.json({ error: 'Invalid campaign details' }, { status: 400 })
@@ -35,7 +35,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     if (body.description !== undefined) {
       const description = body.description.trim()
-      if (description.length < 20 || description.length > 5000) return NextResponse.json({ error: 'Invalid campaign details' }, { status: 400 })
+      if (description.length < 20 || description.length > 10000) return NextResponse.json({ error: 'Invalid campaign details' }, { status: 400 })
       patch.description = description
     }
     if (body.category !== undefined) {
@@ -45,6 +45,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body.imageUrl !== undefined) {
       if (body.imageUrl !== null && !isSafeImageUrl(body.imageUrl)) return NextResponse.json({ error: 'Campaign image must be a public https URL' }, { status: 400 })
       patch.image_url = body.imageUrl
+    }
+    if (body.photos !== undefined) {
+      if (!Array.isArray(body.photos) || body.photos.length > 30) return NextResponse.json({ error: 'Maximum 30 photos' }, { status: 400 })
+      if (body.photos.some((url) => url !== null && !isSafeImageUrl(url))) return NextResponse.json({ error: 'All photos must be public https URLs' }, { status: 400 })
+      patch.photos = body.photos
     }
     if (body.status !== undefined) {
       if (!statuses.has(body.status)) return NextResponse.json({ error: 'Invalid campaign details' }, { status: 400 })

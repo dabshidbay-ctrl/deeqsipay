@@ -1,6 +1,6 @@
 // Direct Sifalo probe. Prints the EXACT request and response so a failure is diagnosable.
 // Usage:  node tools/sifalo-diagnose.mjs <wallet-number> [amount] [gateway]
-//   e.g.  node tools/sifalo-diagnose.mjs 615551234 0.01 zaad
+//   e.g.  node tools/sifalo-diagnose.mjs 615551234 0.01 waafi
 // WARNING: with a REAL number this initiates a REAL charge and should prompt your phone.
 import { readFileSync } from 'node:fs'
 
@@ -10,21 +10,23 @@ const env = Object.fromEntries(
     .map((l) => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, '')] }),
 )
 
-const [account, amount = '0.01', gateway = 'zaad'] = process.argv.slice(2)
+const [account, amount = '0.01', gateway = 'waafi'] = process.argv.slice(2)
 if (!account) { console.error('Pass a wallet number: node tools/sifalo-diagnose.mjs 615551234'); process.exit(1) }
 
-const norm = account.replace(/\D/g, '').replace(/^252(?=\d{9,})/, '')
+// Sifalo expects the account WITH the 252 country code (e.g. 252615551234).
+const norm = account.replace(/\D/g, '')
+const accountWithCode = norm.startsWith('252') ? norm : `252${norm}`
 const url = env.SIFALO_API_BASE_URL ?? 'https://api.sifalopay.com/gateway/'
+// Minimal payload — the ONLY format that works. Extra fields make Sifalo return an empty body.
 const body = {
-  amount, account: norm, gateway, currency: 'USD', channel: 'kindred',
-  txn_order_id: `diag-${Date.now()}`, url: 'https://kindred.local', ip: '127.0.0.1', billing: '',
+  account: accountWithCode, gateway, amount, currency: 'USD', order_id: `diag-${Date.now()}`,
 }
 
 console.log('user  :', env.SIFALO_API_USER ? `${env.SIFALO_API_USER.slice(0, 3)}… (${env.SIFALO_API_USER.length} chars)` : 'MISSING')
 console.log('key   :', env.SIFALO_API_KEY ? `${env.SIFALO_API_KEY.slice(0, 3)}… (${env.SIFALO_API_KEY.length} chars)` : 'MISSING')
 console.log('url   :', url)
-console.log('sent  :', JSON.stringify({ ...body, account: norm }))
-console.log(account !== norm ? `note  : normalised "${account}" -> "${norm}"` : 'note  : number needed no normalisation')
+console.log('sent  :', JSON.stringify(body))
+console.log(account !== accountWithCode ? `note  : normalised "${account}" -> "${accountWithCode}"` : 'note  : number needed no normalisation')
 
 const res = await fetch(url, {
   method: 'POST',

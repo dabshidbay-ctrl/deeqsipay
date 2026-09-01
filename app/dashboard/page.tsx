@@ -2,9 +2,9 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowLeft, Banknote, BarChart3, Clock, Heart, TrendingUp, Users, Wallet } from 'lucide-react'
 import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase/server'
-import { formatMoney, initials, progressPercent } from '@/lib/campaigns'
+import { feeMinor, formatMoney, initials, netMinor, progressPercent } from '@/lib/campaigns'
 
-type OwnedCampaign = { id: string; title: string; status: string; goal_minor: number; raised_minor: number; donor_count: number; currency: string; created_at: string }
+type OwnedCampaign = { id: string; title: string; status: string; goal_minor: number; raised_minor: number; donor_count: number; currency: string; fee_percent: number; created_at: string }
 type DonationRow = {
   id: string
   amount_minor: number
@@ -12,6 +12,7 @@ type DonationRow = {
   status: string
   created_at: string
   is_anonymous: boolean
+  guest_name: string | null
   campaign_id: string
   profiles: { display_name: string | null } | { display_name: string | null }[] | null
 }
@@ -20,6 +21,8 @@ type DonationRow = {
 // to be anonymous — the same guarantee the public donor list gives.
 function donorName(row: DonationRow): string {
   if (row.is_anonymous) return 'Anonymous'
+  // Guest donations carry their name in guest_name; signed-in users have a profile
+  if (row.guest_name && row.guest_name.trim().length > 0) return row.guest_name.trim()
   const profile = Array.isArray(row.profiles) ? row.profiles[0] ?? null : row.profiles
   const name = profile?.display_name?.trim() ?? ''
   return name.length > 0 ? name : 'Anonymous'
@@ -42,12 +45,12 @@ export default async function DashboardPage() {
   const [{ data: campaignRows }, { data: donationRows }] = await Promise.all([
     supabase
       .from('campaigns')
-      .select('id,title,status,goal_minor,raised_minor,donor_count,currency,created_at')
+      .select('id,title,status,goal_minor,raised_minor,donor_count,currency,fee_percent,created_at')
       .eq('owner_id', user.id)
       .order('created_at', { ascending: false }),
     supabase
       .from('donations')
-      .select('id,amount_minor,currency,status,created_at,is_anonymous,campaign_id,profiles!donations_donor_id_fkey(display_name),campaigns!inner(owner_id)')
+      .select('id,amount_minor,currency,status,created_at,is_anonymous,guest_name,campaign_id,profiles!donations_donor_id_fkey(display_name),campaigns!inner(owner_id)')
       .eq('campaigns.owner_id', user.id)
       .order('created_at', { ascending: false })
       .limit(50),
@@ -63,6 +66,10 @@ export default async function DashboardPage() {
   const donorTotal = owned.reduce((sum, campaign) => sum + Number(campaign.donor_count), 0)
   const activeCount = owned.filter((campaign) => campaign.status === 'active').length
 
+  // This is a server component: it renders once per request on the server, so reading the
+  // clock here is deterministic for that render. react-hooks/purity is aimed at client
+  // re-renders, which this function never has.
+  // eslint-disable-next-line react-hooks/purity
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
   const weekMinor = succeeded
     .filter((donation) => new Date(donation.created_at).getTime() >= weekAgo)
@@ -86,10 +93,15 @@ export default async function DashboardPage() {
       <p className="mt-2 text-sm leading-6 text-muted-foreground">Once you start a fundraiser, its performance shows up here.</p>
       <Link href="/create" className="confirm-button mt-6 inline-flex">Start a fundraiser</Link>
     </section> : <>
-      <section className="rounded-2xl bg-primary p-5 text-primary-foreground">
+      <section className="mt-4 rounded-2xl bg-primary p-5 text-primary-foreground">
         <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary-foreground/70">Total raised</p>
         <p className="mt-2 font-serif text-[40px] leading-none tracking-[-0.04em]">{formatMoney(raisedMinor, currency)}</p>
-        <p className="mt-3 text-xs text-primary-foreground/75">across {owned.length} {owned.length === 1 ? 'campaign' : 'campaigns'} · {activeCount} active</p>
+        <p className="mt-1 text-xs text-primary-foreground/75">across {owned.length} {owned.length === 1 ? 'campaign' : 'campaigns'} · {activeCount} active</p>
+        {raisedMinor > 0 && (
+          <p className="mt-2 text-xs text-primary-foreground/65">
+            ~{formatMoney(netMinor(raisedMinor, 6), currency)} after the 6% platform fee
+          </p>
+        )}
       </section>
 
       <section className="mt-3 grid grid-cols-2 gap-3">
@@ -101,7 +113,10 @@ export default async function DashboardPage() {
 
       <section className="mt-8">
         <p className="eyebrow">By campaign</p>
-        <div className="mt-4 space-y-3">{owned.map((campaign) => <article key={campaign.id} className="rounded-2xl border border-border bg-card p-4">
+        <div className="mt-4 space-y-3">{owned.map((campaign) => {
+          const campaignNet = netMinor(Number(campaign.raised_minor), Number(campaign.fee_percent ?? 6))
+          const campaignFee = feeMinor(Number(campaign.raised_minor), Number(campaign.fee_percent ?? 6))
+          return <article key={campaign.id} className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-start justify-between gap-3">
             <h2 className="font-serif text-lg leading-tight">{campaign.title}</h2>
             <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[10px] font-bold capitalize text-primary">{campaign.status}</span>
@@ -111,8 +126,14 @@ export default async function DashboardPage() {
             <span><strong className="text-foreground">{formatMoney(campaign.raised_minor, campaign.currency)}</strong> of {formatMoney(campaign.goal_minor, campaign.currency)}</span>
             <span>{campaign.donor_count} donors · {progressPercent(campaign.raised_minor, campaign.goal_minor)}%</span>
           </div>
+          {Number(campaign.raised_minor) > 0 && (
+            <div className="mt-2 text-xs text-muted-foreground">
+              Net after fee: <strong className="text-foreground">{formatMoney(campaignNet, campaign.currency)}</strong> (fee: {formatMoney(campaignFee, campaign.currency)})
+            </div>
+          )}
           <Link href={`/campaigns/${campaign.id}`} className="mt-3 inline-block text-xs font-bold text-primary">View public page</Link>
-        </article>)}</div>
+        </article>
+        })}</div>
       </section>
 
       <section className="mt-8">

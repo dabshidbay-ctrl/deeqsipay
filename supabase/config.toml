@@ -1,0 +1,35 @@
+# Minimal local config for `supabase start` / `supabase test db`. The hosted project is
+# configured in the dashboard; this file exists so the CLI can stand up a throwaway
+# Postgres with supabase/migrations applied, which is what the pgTAP suite runs against.
+project_id = "kindred"
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.pooler]
+enabled = false
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[studio]
+enabled = false
+
+[inbucket]
+enabled = false
+
+[storage]
+enabled = false
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+
+[analytics]
+enabled = false

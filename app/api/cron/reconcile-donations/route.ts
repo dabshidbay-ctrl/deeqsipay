@@ -27,7 +27,7 @@ function authorised(request: Request) {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
-export async function POST(request: Request) {
+async function reconcile(request: Request) {
   if (!authorised(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const supabase = createAdminClient()
@@ -59,3 +59,15 @@ export async function POST(request: Request) {
     oldestPendingAt: pending[0]?.created_at ?? null,
   })
 }
+
+/**
+ * Vercel Cron calls the schedule in vercel.json with a GET, and — because CRON_SECRET is
+ * set in the project — attaches `Authorization: Bearer $CRON_SECRET` itself, which is
+ * exactly what authorised() checks. POST is kept so an operator can force a run by hand:
+ *
+ *   curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/reconcile-donations
+ *
+ * Both verbs run the same body; neither is safe to expose without the secret.
+ */
+export async function GET(request: Request) { return reconcile(request) }
+export async function POST(request: Request) { return reconcile(request) }

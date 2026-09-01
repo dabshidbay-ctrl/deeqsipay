@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient, requireUser } from '@/lib/server/supabase-admin'
 import { rpcFailure } from '@/lib/server/auth'
 import { isUuid } from '@/lib/server/validation'
+import { sendNotificationEmail, payoutRequestEmail } from '@/lib/server/email'
 
 // Owner-only. POST sends an AMOUNT and nothing else — no balance, no status, no approval
 // (CONTRACT rule 2). request_payout locks the campaign row, re-derives the available figure
@@ -89,6 +90,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     const payoutId = typeof data === 'string' ? data : null
     if (!payoutId) return json({ error: 'Unable to request payout' }, 500)
+
+    // Notify staff about the payout request (fire-and-forget)
+    const { data: campaignRow } = await createAdminClient().from('campaigns').select('title').eq('id', id).maybeSingle()
+    const campaignTitle = campaignRow ? String((campaignRow as Record<string, unknown>).title ?? '') : 'Unknown campaign'
+    sendNotificationEmail(payoutRequestEmail({ id: payoutId, amountMinor, currency: 'USD', campaignTitle })).catch(() => {})
+
     return json({ payoutId }, 201)
   } catch { return json({ error: 'Invalid request' }, 400) }
 }

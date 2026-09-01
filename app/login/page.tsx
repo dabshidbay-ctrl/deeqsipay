@@ -81,7 +81,7 @@ function LoginForm() {
     <section className="pb-12">
       <p className="eyebrow">{mode === 'signin' ? 'welcome back' : 'new here'}</p>
       <h1 className="mt-2 font-serif text-[30px] font-semibold leading-tight tracking-[-0.03em]">
-        {mode === 'signin' ? 'Good to see you again.' : 'Join kindred.'}
+        {mode === 'signin' ? 'Good to see you again.' : 'Join deeqsipay.'}
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
         {mode === 'signin' ? 'Pick up right where you left off.' : 'Start a fundraiser or back one in minutes.'}
@@ -120,7 +120,7 @@ function LoginForm() {
         </button>
       </form>
       <p className="mt-6 text-center text-sm text-muted-foreground">
-        {mode === 'signin' ? 'New to kindred?' : 'Already have an account?'}{' '}
+        {mode === 'signin' ? 'New to deeqsipay?' : 'Already have an account?'}{' '}
         <button suppressHydrationWarning
           type="button"
           className="font-semibold text-foreground underline underline-offset-4"

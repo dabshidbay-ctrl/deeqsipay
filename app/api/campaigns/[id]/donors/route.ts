@@ -18,11 +18,14 @@ type DonorRow = {
   currency: string
   created_at: string
   is_anonymous: boolean
+  guest_name: string | null
   profiles: { display_name: string | null } | { display_name: string | null }[] | null
 }
 
 function displayNameOf(row: DonorRow): string {
   if (row.is_anonymous) return 'Anonymous'
+  // Guest donations have a guest_name; signed-in users have a profile
+  if (row.guest_name && row.guest_name.trim().length > 0) return row.guest_name.trim()
   const profile = Array.isArray(row.profiles) ? row.profiles[0] ?? null : row.profiles
   const name = profile?.display_name?.trim() ?? ''
   return name.length > 0 ? name : 'Anonymous'
@@ -46,7 +49,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const { data, error, count } = await supabase
     .from('donations')
-    .select('amount_minor,currency,created_at,is_anonymous,profiles!donations_donor_id_fkey(display_name)', { count: 'exact' })
+    .select('amount_minor,currency,created_at,is_anonymous,guest_name,profiles!donations_donor_id_fkey(display_name)', { count: 'exact' })
     .eq('campaign_id', id)
     .eq('status', 'succeeded')
     .order('created_at', { ascending: false })

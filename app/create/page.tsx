@@ -17,8 +17,12 @@ const LOGIN_NEXT = '/login?next=/create'
 
 const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp'
 const PHOTO_MAX_BYTES = 5 * 1024 * 1024
+/** Maximum number of campaign photos (first is cover) */
+const MAX_PHOTOS = 30
 const DOCUMENT_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf'
 const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024
+
+const MAX_DESC_CHARS = 10000
 
 function parseGoalMinor(raw: string): number | null {
   if (!GOAL_PATTERN.test(raw)) return null
@@ -70,7 +74,7 @@ function uploadMessage(payload: unknown, status: number): string {
  * authedFetch pins a JSON content-type, which would wreck the multipart boundary, so
  * uploads go out on a plain fetch that borrows the same bearer token.
  */
-async function uploadFile(kind: 'campaign-image' | 'identity-document', file: File): Promise<unknown> {
+async function uploadFile(kind: 'campaign-image' | 'campaign-photos' | 'identity-document', file: File): Promise<unknown> {
   const supabase = tryGetSupabaseBrowserClient()
   if (!supabase) throw new AuthRequiredError()
   const { data: { session } } = await supabase.auth.getSession()
@@ -105,6 +109,7 @@ export default function CreatePage() {
   const [category, setCategory] = useState(CATEGORIES[0] ?? '')
   const [goal, setGoal] = useState('')
   const [photo, setPhoto] = useState<PhotoUpload>({ status: 'empty' })
+  const [additionalPhotos, setAdditionalPhotos] = useState<PhotoUpload[]>([])
   const [identity, setIdentity] = useState<DocumentUpload>({ status: 'empty' })
   const [phones, setPhones] = useState<string[]>(['', ''])
   const [submitting, setSubmitting] = useState(false)
@@ -112,10 +117,12 @@ export default function CreatePage() {
   const [submitted, setSubmitted] = useState(false)
 
   const photoInputRef = useRef<HTMLInputElement | null>(null)
+  const photosInputRef = useRef<HTMLInputElement | null>(null)
   const documentInputRef = useRef<HTMLInputElement | null>(null)
   // Pick a second file mid-upload and the first reply must not land on top of it.
   const photoTicket = useRef(0)
   const documentTicket = useRef(0)
+  const extraPhotosTicket = useRef(0)
 
   const cleanTitle = title.trim()
   const cleanDescription = description.trim()
@@ -123,7 +130,7 @@ export default function CreatePage() {
   const goalMinor = parseGoalMinor(cleanGoal)
 
   const titleInvalid = cleanTitle !== '' && (cleanTitle.length < 8 || cleanTitle.length > 120)
-  const descriptionInvalid = cleanDescription !== '' && (cleanDescription.length < 20 || cleanDescription.length > 5000)
+  const descriptionInvalid = cleanDescription !== '' && (cleanDescription.length < 20 || cleanDescription.length > MAX_DESC_CHARS)
   const goalInvalid = cleanGoal !== '' && goalMinor === null
 
   const trimmedPhones = phones.map((entry) => entry.trim())
@@ -134,7 +141,7 @@ export default function CreatePage() {
     new Set(filledPhones).size === filledPhones.length &&
     filledPhones.every((entry) => PHONE_PATTERN.test(entry))
 
-  const uploading = photo.status === 'uploading' || identity.status === 'uploading'
+  const uploading = photo.status === 'uploading' || identity.status === 'uploading' || additionalPhotos.some((p) => p.status === 'uploading')
 
   function phoneRowError(index: number): string | null {
     const value = trimmedPhones[index] ?? ''
@@ -144,12 +151,15 @@ export default function CreatePage() {
     return null
   }
 
+  const totalPhotoCount = (photo.status === 'ready' ? 1 : 0) + additionalPhotos.filter((p) => p.status === 'ready').length
+  const photoSlotsRemaining = MAX_PHOTOS - totalPhotoCount
+
   /** Whatever is still standing between the organiser and the submit button. */
   function missingPiece(): string | null {
     if (cleanTitle.length < 8) return 'a title of at least 8 characters'
     if (cleanTitle.length > 120) return 'a shorter title — 120 characters at most'
     if (cleanDescription.length < 20) return 'your story, in at least 20 characters'
-    if (cleanDescription.length > 5000) return 'a shorter story — 5000 characters at most'
+    if (cleanDescription.length > MAX_DESC_CHARS) return `a shorter story — ${MAX_DESC_CHARS.toLocaleString()} characters at most`
     if (goalMinor === null) return 'a goal of at least $1'
     if (photo.status !== 'ready') return 'a campaign photo'
     if (identity.status !== 'ready') return 'a photo of your passport or NIRA card'
@@ -240,12 +250,79 @@ export default function CreatePage() {
     setPhones((current) => (index < MIN_PHONES ? current : current.filter((_, position) => position !== index)))
   }
 
+  async function handleExtraPhotosChange(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const files = event.target.files
+    event.target.value = ''
+    if (!files || files.length === 0) return
+
+    const photoSlotsRemaining = MAX_PHOTOS - totalPhotoCount
+    const batch = Array.from(files).slice(0, photoSlotsRemaining)
+
+    // Add placeholder entries for every file being uploaded so the grid shows them
+    // immediately. Each placeholder gets a unique key so we can find it later.
+    const placeholders = batch.map((file) => ({ status: 'uploading' as const, fileName: file.name }))
+    setAdditionalPhotos((current) => [...current, ...placeholders])
+
+    // Upload all files in parallel — much faster than one-at-a-time for multi-select.
+    const results = await Promise.allSettled(
+      batch.map(async (file) => {
+        if (file.size > PHOTO_MAX_BYTES) {
+          return { status: 'failed' as const, fileName: file.name, message: 'That photo is too large. Campaign photos must be under 5 MB.' }
+        }
+        try {
+          const payload = await uploadFile('campaign-photos', file)
+          // The multi-file endpoint returns { urls: [...] }, but we upload one file at a
+          // time so the response is still a single URL. Accept both shapes.
+          const urls = typeof payload === 'object' && payload !== null && 'urls' in payload
+            ? (payload as { urls?: unknown }).urls
+            : null
+          const singleUrl = typeof payload === 'object' && payload !== null && 'url' in payload
+            ? (payload as { url?: unknown }).url
+            : null
+          const url = Array.isArray(urls) ? String(urls[0] ?? '') : typeof singleUrl === 'string' ? singleUrl : ''
+          if (!url) throw new ApiError(502, 'The photo uploaded but no link came back')
+          return { status: 'ready' as const, fileName: file.name, url }
+        } catch (err) {
+          if (err instanceof AuthRequiredError) { router.push(LOGIN_NEXT); return null }
+          return { status: 'failed' as const, fileName: file.name, message: err instanceof ApiError ? err.message : 'We could not reach the network.' }
+        }
+      })
+    )
+
+    // Merge results back — match by position in the batch.
+    setAdditionalPhotos((current) => {
+      const next = [...current]
+      // Find where our placeholders start (the last N entries that are 'uploading')
+      let startIndex = next.length - batch.length
+      if (startIndex < 0) startIndex = 0
+      for (let i = 0; i < results.length; i++) {
+        const idx = startIndex + i
+        if (idx >= next.length) break
+        const result = results[i]
+        if (result.status === 'fulfilled' && result.value !== null) {
+          next[idx] = result.value
+        } else if (result.status === 'rejected') {
+          next[idx] = { status: 'failed' as const, fileName: batch[i]?.name ?? '', message: 'Upload failed.' }
+        }
+      }
+      return next
+    })
+  }
+
+  function removeExtraPhoto(index: number): void {
+    setAdditionalPhotos((current) => current.filter((_, i) => i !== index))
+  }
+
+  function openPhotosPicker(): void {
+    photosInputRef.current?.click()
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     if (submitting) return
     if (uploading) return setError('One of your files is still uploading. Give it a moment.')
     if (cleanTitle.length < 8 || cleanTitle.length > 120) return setError('Give your fundraiser a title between 8 and 120 characters.')
-    if (cleanDescription.length < 20 || cleanDescription.length > 5000) return setError('Tell your story in 20 to 5000 characters.')
+    if (cleanDescription.length < 20 || cleanDescription.length > MAX_DESC_CHARS) return setError(`Tell your story in 20 to ${MAX_DESC_CHARS.toLocaleString()} characters.`)
     if (goalMinor === null) return setError('Set a fundraising goal of at least $1.')
     if (photo.status !== 'ready') return setError('Add a campaign photo so people can picture your story.')
     if (identity.status !== 'ready') return setError('Add a photo of your passport or NIRA card so we can verify you.')
@@ -253,6 +330,7 @@ export default function CreatePage() {
     setSubmitting(true)
     setError(null)
     try {
+      const allPhotoUrls = [photo.url, ...additionalPhotos.filter((p): p is { status: 'ready'; fileName: string; url: string } => p.status === 'ready').map((p) => p.url)]
       const data = await authedFetch<{ campaign?: { id?: string } }>('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -261,7 +339,8 @@ export default function CreatePage() {
           description: cleanDescription,
           category,
           goalMinor,
-          imageUrl: photo.url,
+          imageUrl: photo.url, // Cover photo
+          photos: allPhotoUrls,
           identityDocumentPath: identity.path,
           contactPhones: filledPhones,
         }),
@@ -305,10 +384,10 @@ export default function CreatePage() {
           {titleInvalid && <p className="text-xs font-semibold text-red-500" role="alert">Titles run from 8 to 120 characters.</p>}
 
           <label className="block text-sm font-semibold">Tell your story
-            <textarea suppressHydrationWarning value={description} onChange={(event) => setDescription(event.target.value)} required minLength={20} maxLength={5000} disabled={submitting}
-              className="amount-input min-h-32 resize-none" placeholder="Help people understand why this matters..." />
+            <textarea suppressHydrationWarning value={description} onChange={(event) => setDescription(event.target.value)} required minLength={20} maxLength={MAX_DESC_CHARS} disabled={submitting}
+              className="amount-input min-h-48 resize-y" placeholder="Help people understand why this matters — up to 10,000 characters..." />
           </label>
-          {descriptionInvalid && <p className="text-xs font-semibold text-red-500" role="alert">Your story needs 20 to 5000 characters — you have {cleanDescription.length}.</p>}
+          {descriptionInvalid && <p className="text-xs font-semibold text-red-500" role="alert">Your story needs 20 to {MAX_DESC_CHARS.toLocaleString()} characters — you have {cleanDescription.length}.</p>}
 
           <label className="block text-sm font-semibold">Category
             <select suppressHydrationWarning value={category} onChange={(event) => setCategory(event.target.value)} disabled={submitting} className="amount-input">
@@ -323,16 +402,22 @@ export default function CreatePage() {
           {goalInvalid && <p className="text-xs font-semibold text-red-500" role="alert">Set a goal of at least $1 — whole dollars or up to 2 decimals.</p>}
 
           <div>
-            <p className="text-sm font-semibold">Campaign photo</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">One honest photo does more than a page of words. JPG, PNG or WebP, up to 5 MB. This one is public — donors will see it.</p>
+            <p className="text-sm font-semibold">Campaign photos</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Add 1 to {MAX_PHOTOS} photos. The first one is the cover. JPG, PNG or WebP, up to 5 MB each.
+            </p>
             <input suppressHydrationWarning ref={photoInputRef} type="file" accept={PHOTO_ACCEPT} className="hidden" tabIndex={-1}
               onChange={(event) => { void handlePhotoChange(event) }} />
+            <input suppressHydrationWarning ref={photosInputRef} type="file" accept={PHOTO_ACCEPT} multiple className="hidden" tabIndex={-1}
+              onChange={(event) => { void handleExtraPhotosChange(event) }} />
+
+            {/* Cover photo */}
             {photo.status === 'ready' ? (
               <div className="mt-3 flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
-                <img src={photo.url} alt="Your campaign photo" className="size-16 shrink-0 rounded-xl object-cover" />
+                <img src={photo.url} alt="Cover photo" className="size-16 shrink-0 rounded-xl object-cover" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold">{photo.fileName}</p>
-                  <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-primary"><Check size={12} /> Uploaded</p>
+                  <p className="mt-1 flex items-center gap-1 text-[11px] font-bold text-primary"><Check size={12} /> Cover photo</p>
                 </div>
                 <button suppressHydrationWarning type="button" onClick={openPhotoPicker} disabled={submitting}
                   className="shrink-0 rounded-full border border-border px-3 py-2 text-[11px] font-bold text-foreground">Replace</button>
@@ -343,11 +428,42 @@ export default function CreatePage() {
                 {photo.status === 'uploading' ? (
                   <><Loader2 size={15} className="animate-spin" /> <span className="max-w-[70%] truncate">Uploading {photo.fileName}…</span></>
                 ) : (
-                  <><ImagePlus size={15} /> {photo.status === 'failed' ? 'Choose another photo' : 'Add a campaign photo'}</>
+                  <><ImagePlus size={15} /> {photo.status === 'failed' ? 'Choose another photo' : 'Add a cover photo'}</>
                 )}
               </button>
             )}
             {photo.status === 'failed' && <p className="mt-2 text-xs font-semibold leading-5 text-red-500" role="alert">{photo.message}</p>}
+
+            {/* Additional photos */}
+            {additionalPhotos.length > 0 && (
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {additionalPhotos.map((p, index) => (
+                  <div key={index} className="relative aspect-square overflow-hidden rounded-xl border border-border bg-card">
+                    {p.status === 'ready' ? (
+                      <>
+                        <img src={p.url} alt="" className="size-full object-cover" />
+                        <button type="button" onClick={() => removeExtraPhoto(index)} disabled={submitting}
+                          className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-black/50 text-white"
+                          aria-label="Remove photo"><X size={12} /></button>
+                      </>
+                    ) : p.status === 'uploading' ? (
+                      <div className="flex size-full items-center justify-center"><Loader2 size={16} className="animate-spin text-muted-foreground" /></div>
+                    ) : p.status === 'failed' ? (
+                      <div className="flex size-full items-center justify-center p-1 text-center text-[10px] text-red-500">{p.message}</div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="mt-2 text-xs text-muted-foreground">{totalPhotoCount} / {MAX_PHOTOS} photos</p>
+
+            {photo.status === 'ready' && photoSlotsRemaining > 0 && (
+              <button suppressHydrationWarning type="button" onClick={openPhotosPicker} disabled={submitting}
+                className="amount-option mt-2 flex w-full items-center justify-center gap-2 text-xs">
+                <Plus size={14} /> Add more photos ({photoSlotsRemaining} left)
+              </button>
+            )}
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-4">

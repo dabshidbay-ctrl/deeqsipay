@@ -1,4 +1,4 @@
-# kindred
+# deeqsipay
 
 A mobile-first fundraising platform. Next.js 16 (App Router) · TypeScript · Tailwind v4 · Supabase · Sifalo Pay (mobile money).
 
@@ -81,14 +81,97 @@ stop a campaign owner from writing their own `raised_minor`.
 pnpm dev        # dev server
 pnpm build      # production build (type errors fail the build)
 pnpm typecheck  # tsc --noEmit
+pnpm lint       # eslint (flat config; `tools/` is excluded)
+pnpm test       # vitest — pure unit tests, no database needed
+pnpm test:db    # pgTAP against the real migrations; needs `supabase start` first
 ```
+
+`pnpm test:db` runs `supabase/tests/*.sql` — currently `credit_donation()` idempotency and
+the `request_payout()` reservation guard. Both are money functions where a regression is
+silent, so they run in CI on every push (`.github/workflows/ci.yml`).
+
+## Deploy (Vercel)
+
+The repo is a plain Next.js app — no custom build command, no output directory to set.
+Import it into Vercel and the framework preset does the rest. What Vercel cannot infer:
+
+**1. Environment variables.** Set these in Project Settings → Environment Variables, for
+Production *and* Preview. `.env.example` is the full list; these are the ones without which
+the app is broken rather than merely degraded:
+
+| Variable | Scope | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | all | Safe in the browser |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | all | Safe in the browser; RLS is the protection |
+| `SUPABASE_SERVICE_ROLE_KEY` | server | Bypasses RLS — never prefix `NEXT_PUBLIC_` |
+| `SIFALO_API_USER` / `SIFALO_API_KEY` | server | Without these, donations cannot be charged |
+| `CRON_SECRET` | server | Vercel sends it as `Authorization: Bearer` to the cron route |
+
+Point Preview at a **separate Supabase project**. A preview deployment shares nothing with
+production except the code, and a preview build wired to the production database will write
+real donations from test traffic.
+
+`NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT` and `SENTRY_AUTH_TOKEN` are
+optional; leave them unset and the SDK stays inert and the build still succeeds.
+
+**2. Database.** Migrations are not applied by the build. Run `supabase db push` against the
+production project before the first deploy, and again for any deploy that adds a file to
+`supabase/migrations/`.
+
+**3. Cron.** `vercel.json` schedules `/api/cron/reconcile-donations` every 15 minutes. That
+cadence requires a **paid plan** — Hobby allows one cron invocation per day, and Vercel will
+silently run it daily instead. Either upgrade the project or change the schedule to match
+the plan, then confirm in Project → Cron Jobs that the recorded schedule is what you wrote.
+
+**4. Before the first production deploy.** Rotate the Supabase keys — see *Still to do*
+below. The service-role key that was committed to `.env.example` is in this repo's git
+history, so it must be treated as public the moment the repo is pushed anywhere.
+
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests, a production build and the
+pgTAP suite on every push, using placeholder credentials. A green CI run is the signal that
+a commit is deployable.
+
+## Operations
+
+- **Payout & correction runbook:** `docs/payout-runbook.md`. Money leaves the platform by
+  hand — Sifalo has no disbursement or refund API — so that file is the procedure, and
+  `/how-payouts-work` is the public promise it keeps. Change one, change both.
+- **No refunds.** Donations are gifts and are not returned on request: there is no
+  donor-facing refund form and no refund queue. `refund_donation()` and the admin control on
+  `/admin/transactions` survive as a break-glass correction for fraud, double charges and
+  campaigns removed before payout — see the runbook. The ledger keeps `refund` as an entry
+  kind and `refunded` as a donation status so past reversals stay readable; `ledger_entries`
+  is append-only and that history cannot be rewritten.
+- **Reconciliation cron:** scheduled in `vercel.json`, every 15 minutes. It cannot confirm
+  payments; it ages out stale unknowns and reports what needs a person.
+- **Error monitoring:** Sentry, inert unless `NEXT_PUBLIC_SENTRY_DSN` is set. Events pass
+  through `lib/sentry-scrub.ts` first, which drops request bodies and redacts phone
+  numbers, identity-document paths and tokens. Browser events are tunnelled through
+  `/monitoring` so the strict CSP needs no Sentry exception.
 
 ## Still to do
 
-- Image upload for campaigns (Supabase Storage) — the field is disabled, not faked
-- Rate limiting on `POST /api/donations` and `POST /api/campaigns`
-- ESLint config and a test suite; no automated tests exist yet
+- **Rotate the Supabase keys that were committed to `.env.example`** — they are no longer in
+  the working tree, but they are still in git history, and the service-role key bypasses RLS
+  entirely. Rotating them in Supabase is the only thing that actually revokes them. Nothing
+  else on this list matters as much.
+- No platform fee exists anywhere in the schema or code, so the platform earns nothing
+- `request_payout` and `mark_payout_paid` are called with the wrong arity (migration 0005
+  re-signed both), and `payout_accounts` has no UI or API at all — so no payout can be
+  requested or settled today
+- A timed-out Sifalo charge is recorded as `failed` even though the outcome is unknowable;
+  it should stay `pending` for the reconcile job (`app/api/donations/route.ts`)
+- The guest donation rate limit counts ALL guest donations platform-wide, capping the whole
+  site at 8 per minute (`app/api/donations/route.ts`)
+- No email or SMS anywhere: donors get no receipt and organisers no notification
+- The share button on a campaign page has no handler, and there is no per-campaign OG
+  metadata, so a link pasted into WhatsApp shows nothing
+- Explore search filters the newest 50 campaigns in memory, by title only
+- Campaign `ends_at` is in the schema but nothing sets it
+- Organisers cannot edit a campaign after submitting it
+- `normaliseAccount()` does not strip a domestic trunk zero, and the donation route's phone
+  regex rejects one outright — see the pinned test in `tests/sifalo.test.ts`
+- Five components trip `react-hooks/set-state-in-effect`; the rule is a warning until that
+  data-fetching refactor is done deliberately
 - Generated Supabase types (`supabase gen types typescript`) to remove the `as` casts
   around PostgREST embeds in `lib/campaigns.ts` and `app/api/saved/route.ts`
-- Campaign `ends_at` is in the schema but nothing sets it; the UI hides the countdown
-  until it does

@@ -45,7 +45,7 @@ export default function PrivacyPage() {
             PIN prompt to your handset. We keep only the{' '}
             <strong className="text-foreground">last four digits</strong> against the payment, which is
             enough to trace a disputed charge and not enough to identify you to anyone else. The full
-            number is never stored on Kindred.
+            number is never stored on DeeqsiPay.
           </p>
         </div>
 
@@ -54,8 +54,8 @@ export default function PrivacyPage() {
           <p className="mt-1.5 text-muted-foreground">
             A fundraiser&apos;s title, story, photo, category, goal and total raised are public, along with
             the organiser&apos;s display name. Donations show an amount and a first name; choose{' '}
-            <strong className="text-foreground">anonymous</strong> when you give and no name is attached
-            at all — not on the page, and not in the notification the organiser receives. Donor contact
+            <strong className="text-foreground">anonymous</strong> when you give and the public page shows
+            &ldquo;Anonymous&rdquo; instead of your name — but the organiser still sees your name. Donor contact
             details are never shown publicly, and neither is your email address.
           </p>
         </div>
@@ -76,7 +76,7 @@ export default function PrivacyPage() {
             <li><strong className="text-foreground">Our payment provider,</strong> to take the payment and send payouts.</li>
             <li><strong className="text-foreground">Our hosting and database providers,</strong> which store the site and its records.</li>
             <li><strong className="text-foreground">Our error tracker,</strong> which receives crash reports. Phone numbers, account numbers, access tokens and document paths are stripped out before a report leaves our servers.</li>
-            <li><strong className="text-foreground">The organiser you gave to,</strong> who sees the amount, the date, and your name unless you gave anonymously.</li>
+            <li><strong className="text-foreground">The organiser you gave to,</strong> who sees the amount, the date, and your name — anonymous donations show &ldquo;Anonymous&rdquo; on the public page, but the organiser still sees your name.</li>
           </ul>
           <p className="mt-2.5 text-muted-foreground">
             We do not sell your data, and we do not share it for advertising.

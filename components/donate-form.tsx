@@ -217,7 +217,7 @@ export function DonateForm({ campaign }: { campaign: Campaign }) {
             <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"><ShieldCheck size={13} /> &lsquo;Approve the payment request on your phone&rsquo;</p>
             {error !== null && <p className="text-xs font-semibold text-red-500" role="alert">{error}</p>}
             <button suppressHydrationWarning type="submit" className="confirm-button" disabled={!canSubmit}>
-              {busy ? 'Contacting Sifalo Pay…' : amountMinor !== null ? `Donate ${formatMoney(amountMinor, campaign.currency)}` : 'Choose an amount'}
+              {busy ? 'Contacting Sifalo Pay…' : amountMinor !== null ? `ugu deeq ${formatMoney(amountMinor, campaign.currency)}` : 'Choose an amount'}
             </button>
           </form>
         )}

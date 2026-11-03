@@ -57,19 +57,6 @@ export default async function CampaignPage({ params }: CampaignPageProps) {
           <span>{campaign.donorCount} donors</span>
           {remaining !== null && <span>{remaining} days left</span>}
         </div>
-        {/* Net earnings after fee */}
-        {campaign.raisedMinor > 0 && (
-          <div className="mt-3 rounded-xl bg-accent-softer p-3 text-xs leading-5">
-            <p className="text-muted-foreground">
-              After the <strong>{campaign.feePercent}%</strong> platform fee,{' '}
-              <strong className="text-foreground">{formatMoney(net, campaign.currency)}</strong>{' '}
-              would reach the organiser.
-            </p>
-            <p className="mt-1 text-muted-foreground">
-              Fee: {formatMoney(fee, campaign.currency)}
-            </p>
-          </div>
-        )}
       </div>
 
       <DonorList campaignId={campaign.id} />

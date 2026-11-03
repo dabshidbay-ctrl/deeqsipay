@@ -74,7 +74,7 @@ export default async function CampaignPage({ params }: CampaignPageProps) {
 
       <DonorList campaignId={campaign.id} />
       <Link href={`/campaigns/${campaign.id}/donate`} className="confirm-button mt-6">
-        Donate to this story <Heart size={17} fill="currentColor" />
+        ugu deeq <Heart size={17} fill="currentColor" />
       </Link>
     </section>
   </div></main>

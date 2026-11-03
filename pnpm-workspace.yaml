@@ -1,0 +1,7 @@
+overrides:
+  hono: 4.12.25
+
+allowBuilds:
+  '@sentry/cli': true
+  msw: true
+  unrs-resolver: true
